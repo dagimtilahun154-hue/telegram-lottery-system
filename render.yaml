@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: telegram-lottery-bot
+    env: node
+    plan: free
+    rootDir: bot
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SUPABASE_URL
+        value: https://kbtrohguymjxnzizkimq.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: MINI_APP_URL
+        value: https://mini-app-ten-orpin.vercel.app
