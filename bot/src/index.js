@@ -18,6 +18,16 @@ for (const key of requiredEnv) {
 
 const bot = new Bot(process.env.BOT_TOKEN);
 
+// HTTP health check server for Render.com Web Service
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('🤖 Diktyo Telegram Lottery Bot is running 24/7!\n');
+}).listen(PORT, () => {
+  console.log(`🌐 Health check HTTP server listening on port ${PORT}`);
+});
+
 // Import handlers
 const { registerStartHandler } = require('./handlers/start');
 const { registerRegistrationHandler } = require('./handlers/register');
