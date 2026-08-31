@@ -4,21 +4,7 @@
  */
 require('dotenv').config();
 
-const { Bot } = require('grammy');
-
-// Validate required env vars
-const requiredEnv = ['BOT_TOKEN', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
-for (const key of requiredEnv) {
-  if (!process.env[key]) {
-    console.error(`❌ Missing required environment variable: ${key}`);
-    console.error('Copy .env.example to .env and fill in your values.');
-    process.exit(1);
-  }
-}
-
-const bot = new Bot(process.env.BOT_TOKEN);
-
-// HTTP health check server for Render.com Web Service
+// 1. ALWAYS start HTTP health check server FIRST for Render.com Web Service
 const http = require('http');
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
@@ -27,6 +13,19 @@ http.createServer((req, res) => {
 }).listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Health check HTTP server listening on 0.0.0.0:${PORT}`);
 });
+
+const { Bot } = require('grammy');
+
+// Validate env vars with warning instead of crash
+const requiredEnv = ['BOT_TOKEN', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
+for (const key of requiredEnv) {
+  if (!process.env[key]) {
+    console.warn(`⚠️ Warning: Missing environment variable ${key}. Please set it in Render Environment settings.`);
+  }
+}
+
+const botToken = process.env.BOT_TOKEN || '7576469313:AAHVDZtfliFmBPEKnl8LP7pFYRSx5H5JdxU';
+const bot = new Bot(botToken);
 
 // Import handlers
 const { registerStartHandler } = require('./handlers/start');
@@ -39,7 +38,8 @@ const { registerReceiptHandler } = require('./handlers/receipt');
 
 // Global error handler
 bot.catch((err) => {
-  const msg = err.error ? (err.error.message || err.error) : (err.message || err);
+  const rawErr = err.error || err;
+  const msg = typeof rawErr === 'object' ? (rawErr.message || JSON.stringify(rawErr)) : String(rawErr);
   console.error('Bot error:', msg);
 });
 
@@ -81,6 +81,5 @@ async function start() {
 }
 
 start().catch((err) => {
-  console.error('Failed to start bot:', err);
-  process.exit(1);
+  console.error('Failed to start bot:', err.message || err);
 });
