@@ -5,9 +5,18 @@ const { createClient } = require('@supabase/supabase-js');
 const { TICKET_STATUS, ITEM_STATUS, ROUND_STATUS, LOCK_DURATION_MS, RECEIPT_RETENTION_MS } = require('../utils/constants');
 
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_URL || 'https://kbtrohguymjxnzizkimq.supabase.co',
+  process.env.SUPABASE_SERVICE_KEY || 'placeholder'
 );
+
+function normalizeError(err) {
+  if (!err) return null;
+  if (err instanceof Error) return err;
+  const msg = err.message || err.details || err.hint || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+  const errorObj = new Error(msg);
+  if (err.code) errorObj.code = err.code;
+  return errorObj;
+}
 
 // ── USER OPERATIONS ──────────────────────────────────────────
 

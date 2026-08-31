@@ -20,12 +20,12 @@ const bot = new Bot(process.env.BOT_TOKEN);
 
 // HTTP health check server for Render.com Web Service
 const http = require('http');
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('🤖 Diktyo Telegram Lottery Bot is running 24/7!\n');
-}).listen(PORT, () => {
-  console.log(`🌐 Health check HTTP server listening on port ${PORT}`);
+}).listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 Health check HTTP server listening on 0.0.0.0:${PORT}`);
 });
 
 // Import handlers
@@ -39,8 +39,8 @@ const { registerReceiptHandler } = require('./handlers/receipt');
 
 // Global error handler
 bot.catch((err) => {
-  console.error('Bot error:', err.message);
-  console.error(err.stack);
+  const msg = err.error ? (err.error.message || err.error) : (err.message || err);
+  console.error('Bot error:', msg);
 });
 
 // Register all handlers (order matters — more specific first)
