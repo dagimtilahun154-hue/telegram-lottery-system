@@ -91,7 +91,10 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
             id: b.id,
             event_id: b.event_id,
             title: b.title,
-            message_text: b.message_text,
+            message_text: (b.message_text || '')
+              .replace(/<!--destination:(.+?)-->/g, '')
+              .replace(/<!--target_channel:(.+?)-->/g, '')
+              .trim(),
             image_url: b.image_url,
             button_text: b.button_text,
             button_url: b.button_url,
@@ -162,6 +165,13 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
       created_at: new Date().toISOString()
     };
 
+    // Pack destination and target channel into message_text with tags so broadcastWorker can extract them
+    let packedMessage = message.trim();
+    packedMessage = `<!--destination:${destination}-->` + packedMessage;
+    if (channelTarget && channelTarget.trim()) {
+      packedMessage = `<!--target_channel:${channelTarget.trim()}-->` + packedMessage;
+    }
+
     // If live Supabase connection is active, insert into public.broadcasts so the bot daemon dispatches it
     if (isSupabaseConfigured) {
       try {
@@ -169,7 +179,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
           id: newBc.id,
           event_id: sanitizedEventId,
           title,
-          message_text: message,
+          message_text: packedMessage,
           image_url: imageUrl || null,
           button_text: buttonText || null,
           button_url: buttonUrl || null,
@@ -534,8 +544,14 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
                     <h4 className="text-xs font-bold text-slate-900">{b.title}</h4>
                     <span className="text-[10px] text-slate-400">{b.sent_at}</span>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
-                    {b.status}
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-xs ${
+                    b.status === 'SENT'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60'
+                      : b.status === 'SENDING'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200/60 animate-pulse'
+                      : 'bg-rose-50 text-rose-700 border-rose-200/60'
+                  }`}>
+                    {b.status === 'SENDING' ? '⏳ Dispatching...' : b.status === 'SENT' ? '✓ Delivered' : b.status}
                   </span>
                 </div>
 

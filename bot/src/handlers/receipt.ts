@@ -27,13 +27,10 @@ export async function handleReceiptPhoto(ctx: Context) {
     .from('reservations')
     .select(`
       id,
-      ticket_id,
+      ticket_number,
       event_id,
       expires_at,
       status,
-      lottery_tickets (
-        ticket_number
-      ),
       lottery_events (
         id,
         title,
@@ -62,9 +59,9 @@ export async function handleReceiptPhoto(ctx: Context) {
     );
   }
 
-  const ticketNumber = (reservation as any).lottery_tickets?.ticket_number;
+  const ticketNumber = reservation.ticket_number;
   const event = (reservation as any).lottery_events;
-  const chosenProvider = (event.payment_provider || 'CBE').toUpperCase();
+  const chosenProvider = (event?.payment_provider || 'CBE').toUpperCase();
 
   await ctx.reply(
     t.paymentReceivedVerifying(ticketNumber),
@@ -211,11 +208,10 @@ export async function handleReceiptDocument(ctx: Context) {
       .from('reservations')
       .select(`
         id,
-        ticket_id,
+        ticket_number,
         event_id,
         expires_at,
         status,
-        lottery_tickets ( ticket_number ),
         lottery_events ( id, title, ticket_price, receiver_account_number, receiver_name, payment_provider )
       `)
       .eq('participant_id', participantId)
@@ -234,9 +230,9 @@ export async function handleReceiptDocument(ctx: Context) {
       });
     }
 
-    const ticketNumber = (reservation as any).lottery_tickets?.ticket_number;
+    const ticketNumber = reservation.ticket_number;
     const event = (reservation as any).lottery_events;
-    const chosenProvider = (event.payment_provider || 'CBE').toUpperCase();
+    const chosenProvider = (event?.payment_provider || 'CBE').toUpperCase();
 
     await ctx.reply(t.paymentReceivedVerifying(ticketNumber), { parse_mode: 'Markdown' });
 
@@ -392,10 +388,9 @@ export async function handleReceiptText(ctx: Context) {
       .from('reservations')
       .select(`
         id,
-        ticket_id,
+        ticket_number,
         event_id,
         expires_at,
-        lottery_tickets ( ticket_number ),
         lottery_events ( title, ticket_price )
       `)
       .eq('participant_id', participantId)
@@ -405,7 +400,7 @@ export async function handleReceiptText(ctx: Context) {
       .maybeSingle();
 
     if (reservation) {
-      const ticketNum = (reservation as any).lottery_tickets?.ticket_number;
+      const ticketNum = reservation.ticket_number;
       const eventTitle = (reservation as any).lottery_events?.title || 'Lottery';
       const expiresAt = new Date(reservation.expires_at).getTime();
       const minsLeft = Math.max(1, Math.round((expiresAt - Date.now()) / (60 * 1000)));
@@ -460,11 +455,10 @@ export async function handleReceiptText(ctx: Context) {
     .from('reservations')
     .select(`
       id,
-      ticket_id,
+      ticket_number,
       event_id,
       expires_at,
       status,
-      lottery_tickets ( ticket_number ),
       lottery_events ( id, title, ticket_price, receiver_account_number, receiver_name, payment_provider )
     `)
     .eq('participant_id', participantId)
@@ -483,7 +477,7 @@ export async function handleReceiptText(ctx: Context) {
     });
   }
 
-  const ticketNumber = (reservation as any).lottery_tickets?.ticket_number;
+  const ticketNumber = reservation.ticket_number;
   const event = (reservation as any).lottery_events;
   const isCbe = Boolean(cbeMatch);
   const detectedRef = mbreceiptMatch ? mbreceiptMatch[1] : (cbeFtMatch ? cbeFtMatch[1].toUpperCase() : telebirrMatch![1].toUpperCase());

@@ -96,12 +96,22 @@ export class BroadcastWorker {
         ])
       : undefined;
 
+    // Extract destination and target channel tags if present
+    const destMatch = bc.message_text.match(/<!--destination:(.+?)-->/);
+    const channelMatch = bc.message_text.match(/<!--target_channel:(.+?)-->/);
+    const destination = destMatch ? destMatch[1].trim() : 'ALL';
+    const targetChannel = channelMatch ? channelMatch[1].trim() : this.defaultChannel;
+
+    const cleanText = bc.message_text
+      .replace(/<!--destination:(.+?)-->/g, '')
+      .replace(/<!--target_channel:(.+?)-->/g, '')
+      .trim();
+
     // Formatted message content (HTML)
-    const formattedText = `<b>${this.escapeHtml(bc.title)}</b>\n\n${this.escapeHtml(bc.message_text)}`;
+    const formattedText = `<b>${this.escapeHtml(bc.title)}</b>\n\n${this.escapeHtml(cleanText)}`;
 
     // 1. DISPATCH TO CONFIGURED CHANNEL(S)
-    const targetChannel = this.defaultChannel;
-    if (targetChannel) {
+    if (destination !== 'BOT' && destination !== 'USERS' && targetChannel) {
       try {
         if (bc.image_url) {
           await this.bot.telegram.sendPhoto(targetChannel, bc.image_url, {
@@ -124,68 +134,72 @@ export class BroadcastWorker {
     }
 
     // 2. DISPATCH DIRECT MESSAGES TO TELEGRAM USERS
-    try {
-      let query = supabase.from('users').select('telegram_id, language');
+    if (destination !== 'CHANNEL' && destination !== 'GROUP') {
+      try {
+        let query = supabase.from('users').select('telegram_id, language').eq('is_blocked', false);
 
-      if (bc.target_language && bc.target_language !== 'ALL') {
-        query = query.eq('language', bc.target_language);
-      }
-
-      const { data: users, error: userError } = await query;
-
-      if (!userError && users && users.length > 0) {
-        const totalUsers = users.length;
-        console.log(`👥 [BroadcastWorker] Found ${totalUsers} recipient users.`);
-
-        // Safe batch rate: 25 messages per second
-        const BATCH_SIZE = 25;
-        for (let i = 0; i < users.length; i += BATCH_SIZE) {
-          const batch = users.slice(i, i + BATCH_SIZE);
-
-          await Promise.all(
-            batch.map(async (user) => {
-              let delivered = false;
-              if (bc.image_url) {
-                try {
-                  await this.bot!.telegram.sendPhoto(user.telegram_id, bc.image_url, {
-                    caption: formattedText,
-                    parse_mode: 'HTML',
-                    ...extraKeyboard
-                  });
-                  delivered = true;
-                } catch (photoErr: any) {
-                  console.warn(`[BroadcastWorker] sendPhoto failed for ${user.telegram_id}, falling back to text:`, photoErr.message);
-                }
-              }
-
-              if (!delivered) {
-                try {
-                  await this.bot!.telegram.sendMessage(user.telegram_id, formattedText, {
-                    parse_mode: 'HTML',
-                    ...extraKeyboard
-                  });
-                  delivered = true;
-                } catch (sendErr: any) {
-                  console.warn(`[BroadcastWorker] sendMessage failed for ${user.telegram_id}:`, sendErr.message);
-                }
-              }
-
-              if (delivered) {
-                successful++;
-              } else {
-                failed++;
-              }
-            })
-          );
-
-          // 1 second throttle pause between batches
-          if (i + BATCH_SIZE < users.length) {
-            await new Promise((res) => setTimeout(res, 1000));
-          }
+        if (bc.target_language && bc.target_language !== 'ALL') {
+          query = query.eq('language', bc.target_language);
         }
+
+        const { data: users, error: userError } = await query;
+
+        if (!userError && users && users.length > 0) {
+          const totalUsers = users.length;
+          console.log(`👥 [BroadcastWorker] Found ${totalUsers} recipient users.`);
+
+          // Safe batch rate: 25 messages per second
+          const BATCH_SIZE = 25;
+          for (let i = 0; i < users.length; i += BATCH_SIZE) {
+            const batch = users.slice(i, i + BATCH_SIZE);
+
+            await Promise.all(
+              batch.map(async (user) => {
+                let delivered = false;
+                if (bc.image_url) {
+                  try {
+                    await this.bot!.telegram.sendPhoto(user.telegram_id, bc.image_url, {
+                      caption: formattedText,
+                      parse_mode: 'HTML',
+                      ...extraKeyboard
+                    });
+                    delivered = true;
+                  } catch (photoErr: any) {
+                    console.warn(`[BroadcastWorker] sendPhoto failed for ${user.telegram_id}, falling back to text:`, photoErr.message);
+                  }
+                }
+
+                if (!delivered) {
+                  try {
+                    await this.bot!.telegram.sendMessage(user.telegram_id, formattedText, {
+                      parse_mode: 'HTML',
+                      ...extraKeyboard
+                    });
+                    delivered = true;
+                  } catch (sendErr: any) {
+                    console.warn(`[BroadcastWorker] sendMessage failed for ${user.telegram_id}:`, sendErr.message);
+                  }
+                }
+
+                if (delivered) {
+                  successful++;
+                } else {
+                  failed++;
+                }
+              })
+            );
+
+            // 1 second throttle pause between batches
+            if (i + BATCH_SIZE < users.length) {
+              await new Promise((res) => setTimeout(res, 1000));
+            }
+          }
+        } else {
+          console.log('👥 [BroadcastWorker] No recipient users matched criteria in public.users.');
+        }
+      } catch (usersErr) {
+        console.error('[BroadcastWorker] Error fetching users:', usersErr);
       }
-    } catch (usersErr) {
-      console.error('[BroadcastWorker] Error fetching users:', usersErr);
     }
 
     // 3. UPDATE SUPABASE STATUS TO 'SENT'

@@ -223,15 +223,22 @@ export class DatabaseService {
   async cancelPendingReservation(participantId: string, eventId: string) {
     const { data: res } = await supabase
       .from('reservations')
-      .select('id, ticket_id')
+      .select('id, ticket_number, event_id')
       .eq('participant_id', participantId)
       .eq('event_id', eventId)
-      .eq('status', 'PENDING')
+      .eq('status', 'ACTIVE')
       .maybeSingle();
 
     if (res) {
       await supabase.from('reservations').update({ status: 'CANCELLED' }).eq('id', res.id);
-      await supabase.from('lottery_tickets').update({ status: 'AVAILABLE' }).eq('id', res.ticket_id);
+      await supabase.from('lottery_tickets').update({
+        status: 'AVAILABLE',
+        current_reservation_id: null,
+        reserved_by_participant_id: null
+      }).match({
+        event_id: res.event_id,
+        ticket_number: res.ticket_number
+      });
       return true;
     }
     return false;
