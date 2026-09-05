@@ -144,22 +144,35 @@ export class BroadcastWorker {
 
           await Promise.all(
             batch.map(async (user) => {
-              try {
-                if (bc.image_url) {
+              let delivered = false;
+              if (bc.image_url) {
+                try {
                   await this.bot!.telegram.sendPhoto(user.telegram_id, bc.image_url, {
                     caption: formattedText,
                     parse_mode: 'HTML',
                     ...extraKeyboard
                   });
-                } else {
+                  delivered = true;
+                } catch (photoErr: any) {
+                  console.warn(`[BroadcastWorker] sendPhoto failed for ${user.telegram_id}, falling back to text:`, photoErr.message);
+                }
+              }
+
+              if (!delivered) {
+                try {
                   await this.bot!.telegram.sendMessage(user.telegram_id, formattedText, {
                     parse_mode: 'HTML',
                     ...extraKeyboard
                   });
+                  delivered = true;
+                } catch (sendErr: any) {
+                  console.warn(`[BroadcastWorker] sendMessage failed for ${user.telegram_id}:`, sendErr.message);
                 }
+              }
+
+              if (delivered) {
                 successful++;
-              } catch (sendErr: any) {
-                // User may have blocked the bot or chat deleted
+              } else {
                 failed++;
               }
             })

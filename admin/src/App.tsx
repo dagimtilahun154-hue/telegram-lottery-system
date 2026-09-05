@@ -92,32 +92,57 @@ function AdminContent() {
 
   const pendingReviewCount = purchases.filter(p => p.status === 'MANUAL_REVIEW').length;
 
-  const handleAddEvent = (newEvent: LotteryEvent) => {
+  const handleAddEvent = async (newEvent: LotteryEvent) => {
     const updated = [newEvent, ...events];
     setEvents(updated);
     localStorage.setItem('lottery_admin_events', JSON.stringify(updated));
 
-    // Persist to Supabase if configured
-    supabase.from('lottery_events').insert({
-      id: newEvent.id,
-      title: newEvent.title,
-      slug: newEvent.slug,
-      description: newEvent.description,
-      image_url: newEvent.image_url,
-      ticket_price: newEvent.ticket_price,
-      start_number: newEvent.start_number,
-      end_number: newEvent.end_number,
-      total_tickets: newEvent.total_tickets,
-      payment_provider: newEvent.payment_provider,
-      receiver_account_number: newEvent.receiver_account_number,
-      receiver_name: newEvent.receiver_name,
-      sales_start_at: newEvent.sales_start_at,
-      sales_end_at: newEvent.sales_end_at,
-      draw_at: newEvent.draw_at,
-      status: newEvent.status
-    }).then(({ error }) => {
-      if (error) console.warn('[Supabase] Event save notice:', error.message);
-    });
+    // Persist to Supabase
+    try {
+      const { error: evtError } = await supabase.from('lottery_events').insert({
+        id: newEvent.id,
+        title: newEvent.title,
+        slug: newEvent.slug,
+        description: newEvent.description,
+        image_url: newEvent.image_url,
+        ticket_price: newEvent.ticket_price,
+        start_number: newEvent.start_number,
+        end_number: newEvent.end_number,
+        total_tickets: newEvent.total_tickets,
+        payment_provider: newEvent.payment_provider,
+        receiver_account_number: newEvent.receiver_account_number,
+        receiver_name: newEvent.receiver_name,
+        sales_start_at: newEvent.sales_start_at,
+        sales_end_at: newEvent.sales_end_at,
+        draw_at: newEvent.draw_at,
+        status: newEvent.status
+      });
+
+      if (evtError) {
+        console.error('[Supabase] Failed to insert event:', evtError.message);
+        return;
+      }
+
+      // Automatically generate tickets 1..total for this event
+      const { error: ticketError } = await supabase.rpc('generate_lottery_tickets', {
+        p_event_id: newEvent.id,
+        p_start_number: newEvent.start_number,
+        p_end_number: newEvent.end_number
+      });
+
+      if (ticketError) {
+        console.warn('[Supabase] generate_lottery_tickets notice:', ticketError.message);
+      }
+
+      // Refresh live events from Supabase to sync authoritative state
+      const refreshedEvents = await fetchLiveEvents();
+      if (refreshedEvents && refreshedEvents.length > 0) {
+        setEvents(refreshedEvents);
+        localStorage.setItem('lottery_admin_events', JSON.stringify(refreshedEvents));
+      }
+    } catch (err: any) {
+      console.error('[Supabase] Exception in handleAddEvent:', err.message);
+    }
   };
 
   const handleUpdateEventStatus = (eventId: string, newStatus: any) => {

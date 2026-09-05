@@ -42,7 +42,7 @@ export const Events: React.FC<EventsProps> = ({
     if (!title || !ticketPrice || !receiverAccount || !receiverName) return;
 
     const newEvt: LotteryEvent = {
-      id: `evt-${Date.now()}`,
+      id: crypto.randomUUID(),
       title,
       slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       description: description || `Win a ${title}! Total tickets: ${totalTickets}. Verified via ${paymentProvider}.`,

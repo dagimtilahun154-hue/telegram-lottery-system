@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Send, 
   Image as ImageIcon, 
@@ -30,7 +30,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
   const [message, setMessage] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [buttonText, setButtonText] = useState('Cut Your Ticket Now 🎟️');
-  const [buttonUrl, setButtonUrl] = useState('https://t.me/richo_lottery_bot');
+  const [buttonUrl, setButtonUrl] = useState('https://t.me/meklawbot');
   const [targetEventId, setTargetEventId] = useState('ALL');
   const [targetLanguage, setTargetLanguage] = useState<'ALL' | 'en' | 'am' | 'om'>('ALL');
   const [isSending, setIsSending] = useState(false);
@@ -45,6 +45,49 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
       return [];
     }
   });
+
+  // Fetch live broadcasts from Supabase on mount and poll
+  useEffect(() => {
+    let isMounted = true;
+    async function loadBroadcasts() {
+      try {
+        const { data, error } = await supabase
+          .from('broadcasts')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && isMounted) {
+          const mapped: Broadcast[] = data.map((b: any) => ({
+            id: b.id,
+            event_id: b.event_id,
+            title: b.title,
+            message_text: b.message_text,
+            image_url: b.image_url,
+            button_text: b.button_text,
+            button_url: b.button_url,
+            target_language: b.target_language || 'ALL',
+            total_recipients: b.total_recipients || 0,
+            successful_deliveries: b.successful_deliveries || 0,
+            failed_deliveries: b.failed_deliveries || 0,
+            status: b.status || 'SENT',
+            sent_at: b.sent_at ? new Date(b.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
+            created_at: b.created_at || new Date().toISOString()
+          }));
+          setBroadcasts(mapped);
+          localStorage.setItem('lottery_admin_broadcasts', JSON.stringify(mapped));
+        }
+      } catch (err) {
+        console.warn('Failed to load broadcasts from Supabase:', err);
+      }
+    }
+
+    loadBroadcasts();
+    const timer = setInterval(loadBroadcasts, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   const applyTemplate = (type: 'launch' | 'draw' | 'winner') => {
     if (type === 'launch') {
@@ -68,9 +111,12 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
 
     setIsSending(true);
 
+    const isValidUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    const sanitizedEventId = (targetEventId && targetEventId !== 'ALL' && isValidUuid(targetEventId)) ? targetEventId : null;
+
     const newBc: Broadcast = {
-      id: `bc-${Date.now()}`,
-      event_id: targetEventId !== 'ALL' ? targetEventId : null,
+      id: crypto.randomUUID(),
+      event_id: sanitizedEventId,
       title,
       message_text: message,
       image_url: imageUrl || null,
@@ -88,8 +134,9 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
     // If live Supabase connection is active, insert into public.broadcasts so the bot daemon dispatches it
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('broadcasts').insert({
-          event_id: targetEventId !== 'ALL' ? targetEventId : null,
+        const { data: inserted, error: bcError } = await supabase.from('broadcasts').insert({
+          id: newBc.id,
+          event_id: sanitizedEventId,
           title,
           message_text: message,
           image_url: imageUrl || null,
@@ -98,14 +145,20 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
           target_language: targetLanguage,
           status: 'SENDING', // signals bot broadcastWorker to dispatch
           total_recipients: destination === 'CHANNEL' ? 1 : 0
-        });
+        }).select();
+
+        if (bcError) {
+          console.error('[Supabase] Broadcast insert failed:', bcError.message);
+        } else {
+          console.log('[Supabase] Broadcast successfully queued for dispatch:', inserted);
+        }
       } catch (err) {
         console.warn('Could not insert broadcast to Supabase:', err);
       }
     }
 
     setTimeout(() => {
-      setBroadcasts([newBc, ...broadcasts]);
+      setBroadcasts(prev => [newBc, ...prev]);
       setIsSending(false);
       setSentSuccess(true);
       setTimeout(() => setSentSuccess(false), 4500);
@@ -113,7 +166,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
       setTitle('');
       setMessage('');
       setImageUrl('');
-    }, 900);
+    }, 800);
   };
 
   return (
