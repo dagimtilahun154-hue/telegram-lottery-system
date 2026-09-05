@@ -328,24 +328,45 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
-          {/* Infrastructure Health */}
-          <div className="reference-card p-5 space-y-3">
+          {/* Infrastructure Health & Live Diagnostics */}
+          <div className="reference-card p-5 space-y-3.5">
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Live System Connectivity</h4>
+            
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-slate-900 flex items-center gap-1.5">
                 <Database className="w-4 h-4 text-emerald-600" /> Supabase Database
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Connected
+                Connected (Live)
               </span>
             </div>
 
             <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
               <span className="font-bold text-slate-900 flex items-center gap-1.5">
-                <Bot className="w-4 h-4 text-blue-600" /> Telegram Bot Polling
+                <Bot className="w-4 h-4 text-blue-600" /> Render Bot Engine
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                Daemon Active
+              <a
+                href="https://richo-ekub-bot.onrender.com/health"
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+              >
+                Online (Port 10000) ↗
+              </a>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+              <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-purple-600" /> Telegram Bot User
               </span>
+              <a
+                href="https://t.me/meklawbot"
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors"
+              >
+                @meklawbot ↗
+              </a>
             </div>
           </div>
         </div>

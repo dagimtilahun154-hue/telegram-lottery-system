@@ -21,6 +21,25 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
   onLogout
 }) => {
   const { language, setLanguage, t } = useI18n();
+  const [botOnline, setBotOnline] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkBot = async () => {
+      try {
+        const res = await fetch('https://richo-ekub-bot.onrender.com/health', { method: 'GET' });
+        if (isMounted) setBotOnline(res.ok);
+      } catch {
+        if (isMounted) setBotOnline(false);
+      }
+    };
+    checkBot();
+    const timer = setInterval(checkBot, 25000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   return (
     <header className="h-16 glass-header px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20 transition-all">
@@ -45,8 +64,33 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </div>
       </div>
 
-      {/* Right: Search, Language Switcher, Notification Bell, User Profile */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      {/* Right: Live Bot, Search, Language Switcher, Notification Bell, User Profile */}
+      <div className="flex items-center gap-2.5 sm:gap-3.5">
+        {/* Live Bot Engine Indicator */}
+        <a
+          href="https://t.me/meklawbot"
+          target="_blank"
+          rel="noreferrer"
+          title="Open Telegram Bot (@meklawbot)"
+          className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all ${
+            botOnline === true
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100 shadow-xs'
+              : botOnline === false
+              ? 'bg-rose-50 text-rose-700 border-rose-200/80'
+              : 'bg-slate-50 text-slate-600 border-slate-200'
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              botOnline === true
+                ? 'bg-emerald-500 animate-pulse'
+                : botOnline === false
+                ? 'bg-rose-500'
+                : 'bg-slate-400'
+            }`}
+          />
+          <span>{botOnline === true ? 'Bot: Online' : botOnline === false ? 'Bot: Offline' : 'Bot: Checking...'}</span>
+        </a>
         {/* Search input */}
         <div className="relative hidden md:block">
           <input
