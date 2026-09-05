@@ -26,3 +26,22 @@ services:
         sync: false
       - key: VERITAS_API_KEYS
         sync: false
+
+  - type: web
+    name: richo-lottery-admin
+    runtime: static
+    plan: free
+    region: oregon
+    rootDir: admin
+    buildCommand: npm install --include=dev && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    autoDeploy: true
+    envVars:
+      - key: VITE_SUPABASE_URL
+        value: https://bottnxyxyvecvdladcoe.supabase.co
+      - key: VITE_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvdHRueHl4eXZlY3ZkbGFkY29lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODU1MDE4NiwiZXhwIjoyMTA0MTI2MTg2fQ.SDwCwscGwBRYXZVz7f9iKmnW7i9z-ruWySYJZRhHJaU

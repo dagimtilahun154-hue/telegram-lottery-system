@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Trophy, AlertTriangle, Layers, Ticket, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { LotteryEvent } from '../types';
 import { useI18n } from '../lib/i18n';
+import { supabase } from '../lib/supabase';
 
 interface WinnersProps {
   events: LotteryEvent[];
@@ -34,11 +35,40 @@ export const Winners: React.FC<WinnersProps> = ({ events, purchases }) => {
     }
   };
 
-  const handleConfirmWinner = () => {
+  const handleConfirmWinner = async () => {
     if (!inspectedWinner || inspectedWinner.notFound) return;
-    setConfirmedWinner(inspectedWinner);
+    const winner = inspectedWinner;
+    setConfirmedWinner(winner);
     setInspectedWinner(null);
     setWinningNumber('');
+
+    try {
+      // 1. Mark ticket as WINNER in database
+      await supabase.from('lottery_tickets').update({
+        status: 'WINNER'
+      }).match({
+        event_id: winner.eventId,
+        ticket_number: winner.ticketNumber
+      });
+
+      // 2. Mark event as WINNER_SELECTED
+      await supabase.from('lottery_events').update({
+        status: 'WINNER_SELECTED',
+        winner_message: `🎉 Official Winner: Ticket #${winner.ticketNumber} (${winner.customerName})`
+      }).eq('id', winner.eventId);
+
+      // 3. Queue public broadcast announcement for Telegram Bot subscribers & channel
+      await supabase.from('broadcasts').insert({
+        event_id: winner.eventId,
+        title: `🏆 OFFICIAL WINNER ANNOUNCED!`,
+        message_text: `🎉 *እንኳን ደስ አለዎት! የአሸናፊው ቲኬት ይፋ ሆነ!*\n\nለ *${winner.eventTitle}* አሸናፊ የሆነው ቲኬት ቁጥር *#${winner.ticketNumber}* (${winner.customerName}) ነው!\n\nዕድለኛውን አሸናፊ እንኳን ደስ አለዎት እያልን፤ በቅርቡ የሽልማት አሰጣጡን የምናሳውቅ ይሆናል።`,
+        target_language: 'ALL',
+        status: 'SENDING',
+        total_recipients: 1
+      });
+    } catch (err) {
+      console.error('[Supabase] Failed to sync confirmed winner:', err);
+    }
   };
 
   if (!currentEvent) {

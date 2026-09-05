@@ -152,7 +152,8 @@ function AdminContent() {
     supabase.from('lottery_events').update({ status: newStatus }).eq('id', eventId).then();
   };
 
-  const handleAddManualSale = (newSale: any) => {
+  const handleAddManualSale = async (newSale: any) => {
+    // 1. Optimistic UI update
     const updatedPurchases = [newSale, ...purchases];
     setPurchases(updatedPurchases);
     localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
@@ -170,9 +171,102 @@ function AdminContent() {
     });
     setEvents(updatedEvents);
     localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
+
+    // 2. Persist to Supabase
+    try {
+      // a) Ensure participant exists
+      let participantId: string | null = null;
+      const { data: existingPart } = await supabase
+        .from('participants')
+        .select('id')
+        .eq('phone_number', newSale.phoneNumber)
+        .maybeSingle();
+
+      if (existingPart?.id) {
+        participantId = existingPart.id;
+      } else {
+        const { data: createdPart } = await supabase
+          .from('participants')
+          .insert({
+            full_name: newSale.customerName,
+            phone_number: newSale.phoneNumber,
+            source: 'MANUAL'
+          })
+          .select('id')
+          .single();
+        participantId = createdPart?.id || null;
+      }
+
+      if (!participantId) {
+        console.error('[Supabase] Could not resolve participant ID for manual sale');
+        return;
+      }
+
+      // b) Create completed reservation
+      const resId = crypto.randomUUID();
+      await supabase.from('reservations').insert({
+        id: resId,
+        event_id: newSale.eventId,
+        ticket_number: newSale.ticketNumber,
+        participant_id: participantId,
+        source: 'MANUAL',
+        status: 'COMPLETED',
+        reserved_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+        completed_at: new Date().toISOString()
+      });
+
+      // c) Issue ticket in inventory
+      await supabase.from('lottery_tickets').update({
+        status: 'ISSUED',
+        current_reservation_id: resId,
+        owner_participant_id: participantId,
+        issued_at: new Date().toISOString()
+      }).match({
+        event_id: newSale.eventId,
+        ticket_number: newSale.ticketNumber
+      });
+
+      // d) Record verified payment
+      await supabase.from('payments').insert({
+        id: newSale.id,
+        event_id: newSale.eventId,
+        ticket_number: newSale.ticketNumber,
+        reservation_id: resId,
+        participant_id: participantId,
+        payment_rail: newSale.provider || 'CASH',
+        amount: newSale.amount,
+        transaction_reference: newSale.reference || `POS-${Date.now()}`,
+        status: 'VERIFIED',
+        reviewed_at: new Date().toISOString()
+      });
+
+      // e) Increment event totals in DB
+      const targetEvent = events.find(e => e.id === newSale.eventId);
+      if (targetEvent) {
+        await supabase.from('lottery_events').update({
+          sold_tickets: (targetEvent.sold_tickets || 0) + 1,
+          revenue: (targetEvent.revenue || 0) + newSale.amount
+        }).eq('id', newSale.eventId);
+      }
+
+      // Refresh live records
+      const [liveEvts, livePurchases] = await Promise.all([
+        fetchLiveEvents(),
+        fetchLivePurchases()
+      ]);
+      if (liveEvts?.length) setEvents(liveEvts);
+      if (livePurchases) setPurchases(livePurchases);
+    } catch (err) {
+      console.error('[Supabase] Failed to persist manual sale:', err);
+    }
   };
 
-  const handleApprovePayment = (id: string, notes?: string) => {
+  const handleApprovePayment = async (id: string, notes?: string) => {
+    const approved = purchases.find(p => p.id === id);
+    if (!approved) return;
+
+    // 1. Optimistic UI update
     const updatedPurchases = purchases.map(p => {
       if (p.id === id) {
         return { ...p, status: 'ISSUED' as const, rejectionReason: null };
@@ -182,28 +276,85 @@ function AdminContent() {
     setPurchases(updatedPurchases);
     localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
 
-    const approved = purchases.find(p => p.id === id);
-    if (approved) {
-      const updatedEvents = events.map(e => {
-        if (e.id === approved.eventId) {
-          const sold = (e.sold_tickets || 0) + 1;
-          return {
-            ...e,
-            sold_tickets: sold,
-            revenue: (e.revenue || 0) + approved.amount
-          };
-        }
-        return e;
-      });
-      setEvents(updatedEvents);
-      localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
-    }
-
-    supabase.from('payments').update({ status: 'VERIFIED' }).eq('id', id).then();
+    const updatedEvents = events.map(e => {
+      if (e.id === approved.eventId) {
+        const sold = (e.sold_tickets || 0) + 1;
+        return {
+          ...e,
+          sold_tickets: sold,
+          revenue: (e.revenue || 0) + approved.amount
+        };
+      }
+      return e;
+    });
+    setEvents(updatedEvents);
+    localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
     setActiveReceiptPurchase(null);
+
+    // 2. Comprehensive Database & Bot Sync
+    try {
+      // a) Update payment status
+      await supabase.from('payments').update({ 
+        status: 'VERIFIED',
+        reviewed_at: new Date().toISOString()
+      }).eq('id', id);
+
+      // b) Complete reservation
+      if (approved.reservationId) {
+        await supabase.from('reservations').update({
+          status: 'COMPLETED',
+          completed_at: new Date().toISOString()
+        }).eq('id', approved.reservationId);
+      }
+
+      // c) Issue ticket in inventory
+      await supabase.from('lottery_tickets').update({
+        status: 'ISSUED',
+        owner_participant_id: approved.participantId || null,
+        issued_at: new Date().toISOString()
+      }).match({
+        event_id: approved.eventId,
+        ticket_number: approved.ticketNumber
+      });
+
+      // d) Increment event revenue & sold tickets
+      const targetEvent = events.find(e => e.id === approved.eventId);
+      if (targetEvent) {
+        await supabase.from('lottery_events').update({
+          sold_tickets: (targetEvent.sold_tickets || 0) + 1,
+          revenue: (targetEvent.revenue || 0) + approved.amount
+        }).eq('id', approved.eventId);
+      }
+
+      // e) Queue Telegram bot direct notification if participant has a telegram ID
+      if (approved.telegramUserId) {
+        await supabase.from('broadcasts').insert({
+          event_id: approved.eventId,
+          title: `🎟️ Ticket #${approved.ticketNumber} Payment Confirmed!`,
+          message_text: `🎉 *እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል!*\n\nለ *${approved.eventTitle}* የቆረጡት ቲኬት ቁጥር *#${approved.ticketNumber}* በተሳካ ሁኔታ ተረጋግጦ ይፋ ሆኗል።\n\nመልካም ዕድል! 🤞`,
+          target_language: 'ALL',
+          status: 'SENDING',
+          total_recipients: 1
+        });
+      }
+
+      // Refresh live records
+      const [liveEvts, livePurchases] = await Promise.all([
+        fetchLiveEvents(),
+        fetchLivePurchases()
+      ]);
+      if (liveEvts?.length) setEvents(liveEvts);
+      if (livePurchases) setPurchases(livePurchases);
+    } catch (err) {
+      console.error('[Supabase] Failed to execute full payment approval sync:', err);
+    }
   };
 
-  const handleRejectPayment = (id: string, reason: string) => {
+  const handleRejectPayment = async (id: string, reason: string) => {
+    const rejected = purchases.find(p => p.id === id);
+    if (!rejected) return;
+
+    // 1. Optimistic UI update
     const updatedPurchases = purchases.map(p => {
       if (p.id === id) {
         return { ...p, status: 'REJECTED' as const, rejectionReason: reason };
@@ -212,9 +363,57 @@ function AdminContent() {
     });
     setPurchases(updatedPurchases);
     localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
-
-    supabase.from('payments').update({ status: 'REJECTED', rejection_reason: reason }).eq('id', id).then();
     setActiveReceiptPurchase(null);
+
+    // 2. Comprehensive Database & Bot Sync
+    try {
+      // a) Update payment status
+      await supabase.from('payments').update({ 
+        status: 'REJECTED', 
+        rejection_reason: reason,
+        reviewed_at: new Date().toISOString()
+      }).eq('id', id);
+
+      // b) Cancel reservation
+      if (rejected.reservationId) {
+        await supabase.from('reservations').update({
+          status: 'CANCELLED'
+        }).eq('id', rejected.reservationId);
+      }
+
+      // c) Release ticket back to AVAILABLE inventory
+      await supabase.from('lottery_tickets').update({
+        status: 'AVAILABLE',
+        current_reservation_id: null,
+        reserved_by_participant_id: null,
+        owner_participant_id: null
+      }).match({
+        event_id: rejected.eventId,
+        ticket_number: rejected.ticketNumber
+      });
+
+      // d) Queue Telegram bot notice to user
+      if (rejected.telegramUserId) {
+        await supabase.from('broadcasts').insert({
+          event_id: rejected.eventId,
+          title: `⚠️ Payment Notice for Ticket #${rejected.ticketNumber}`,
+          message_text: `⚠️ *የክፍያ ማስታወቂያ (Payment Notice)*\n\nለ *${rejected.eventTitle}* የቆረጡት ቲኬት #${rejected.ticketNumber} ክፍያ ተቀባይነት አላገኘም፦\n*ምክንያት:* ${reason}\n\nቲኬቱ ለሌሎች ክፍት እንዲሆን ተደርጓል። ጥያቄ ካለዎት ድጋፍ ሰጪን ያነጋግሩ።`,
+          target_language: 'ALL',
+          status: 'SENDING',
+          total_recipients: 1
+        });
+      }
+
+      // Refresh live records
+      const [liveEvts, livePurchases] = await Promise.all([
+        fetchLiveEvents(),
+        fetchLivePurchases()
+      ]);
+      if (liveEvts?.length) setEvents(liveEvts);
+      if (livePurchases) setPurchases(livePurchases);
+    } catch (err) {
+      console.error('[Supabase] Failed to execute payment rejection sync:', err);
+    }
   };
 
   return (

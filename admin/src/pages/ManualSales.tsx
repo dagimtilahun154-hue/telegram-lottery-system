@@ -93,7 +93,7 @@ export const ManualSales: React.FC<ManualSalesProps> = ({
     if (!selectedTicketNumber || !fullName || !phoneNumber) return;
 
     const newSale = {
-      id: `pay-manual-${Date.now()}`,
+      id: crypto.randomUUID(),
       ticketNumber: selectedTicketNumber,
       customerName: fullName,
       phoneNumber,

@@ -83,6 +83,10 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         detected_amount,
         rejection_reason,
         created_at,
+        reservation_id,
+        event_id,
+        ticket_number,
+        participant_id,
         reservations (
           id,
           ticket_number,
@@ -90,6 +94,8 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
           reserved_at,
           expires_at,
           participants (
+            id,
+            user_id,
             full_name,
             phone_number,
             telegram_username
@@ -118,11 +124,14 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
 
       return {
         id: item.id,
-        ticketNumber: res.ticket_number || 0,
+        ticketNumber: item.ticket_number || res.ticket_number || 0,
         customerName: part.full_name || 'Anonymous',
         phoneNumber: part.phone_number || '',
         telegramUsername: part.telegram_username || undefined,
-        eventId: evt.id || '',
+        telegramUserId: part.user_id || undefined,
+        reservationId: item.reservation_id || res.id || undefined,
+        participantId: item.participant_id || part.id || undefined,
+        eventId: item.event_id || evt.id || '',
         eventTitle: evt.title || 'Lottery Event',
         amount: Number(item.amount || 0),
         status: (item.status === 'VERIFIED' ? 'ISSUED' : item.status) as any,

@@ -148,6 +148,9 @@ export interface PurchaseRecord {
   customerName: string;
   phoneNumber: string;
   telegramUsername?: string | null;
+  telegramUserId?: number | null;
+  reservationId?: string | null;
+  participantId?: string | null;
   eventId: string;
   eventTitle: string;
   amount: number;
