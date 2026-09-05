@@ -173,15 +173,20 @@ export async function startBot() {
   broadcastWorker.init(bot);
   broadcastWorker.start();
 
-  // Start HTTP healthcheck server for Hugging Face container health monitor
+  // Start HTTP healthcheck server for Render / container health monitor
   server.listen(CONFIG.PORT, '0.0.0.0', () => {
-    console.log(`🌐 Hugging Face Healthcheck server listening on http://0.0.0.0:${CONFIG.PORT}`);
+    console.log(`🌐 Healthcheck server listening on http://0.0.0.0:${CONFIG.PORT}`);
   });
 
   if (CONFIG.BOT_TOKEN && CONFIG.BOT_TOKEN !== 'dummy_token') {
-    console.log('🚀 Starting Telegram Bot polling...');
-    await bot.launch();
-    console.log('🤖 Telegram Bot is running successfully.');
+    try {
+      console.log('🚀 Clearing lingering webhooks & starting Telegram Bot polling...');
+      await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(() => {});
+      await bot.launch();
+      console.log('🤖 Telegram Bot is running successfully and polling.');
+    } catch (botErr) {
+      console.error('❌ Failed to launch Telegram polling:', botErr);
+    }
   } else {
     console.log('ℹ️ Telegram Bot compiled and ready. Provide BOT_TOKEN to launch polling.');
   }
@@ -202,7 +207,8 @@ export async function startBot() {
   process.once('SIGTERM', shutdown);
 }
 
-// Auto-run if executed directly
-if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
-  startBot().catch(console.error);
-}
+// Always auto-run when index.js is executed
+startBot().catch((err) => {
+  console.error('❌ Fatal error during bot startup:', err);
+  process.exit(1);
+});

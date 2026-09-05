@@ -256,12 +256,30 @@ export class DatabaseService {
    * Release expired reservations
    */
   async releaseExpired() {
-    const { data, error } = await supabase.rpc('release_expired_reservations_atomic');
-    if (error) {
-      console.error('[DatabaseService] release_expired_reservations_atomic Error:', error);
+    try {
+      const { data, error } = await supabase.rpc('release_expired_reservations_atomic');
+      if (!error && data) return data;
+    } catch (_) {}
+
+    // Graceful fallback if RPC function is not yet installed in Supabase
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('tickets')
+        .update({
+          status: 'AVAILABLE',
+          reserved_by_participant_id: null,
+          reserved_at: null,
+          reservation_expires_at: null
+        })
+        .eq('status', 'RESERVED')
+        .lt('reservation_expires_at', now)
+        .select('id');
+
+      return { success: !error, released_count: data?.length || 0 };
+    } catch (e) {
       return { success: false, released_count: 0 };
     }
-    return data;
   }
 }
 

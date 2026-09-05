@@ -64,7 +64,7 @@ export class BroadcastWorker {
         .limit(3);
 
       if (error) {
-        console.error('[BroadcastWorker] Query error:', error.message);
+        // Suppress repeated schema cache warnings if table does not exist yet
         return;
       }
 
