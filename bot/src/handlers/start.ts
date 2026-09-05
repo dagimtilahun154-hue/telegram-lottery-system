@@ -80,6 +80,14 @@ export async function handleLanguageSelect(ctx: Context, lang: SupportedLanguage
   );
 }
 
+export interface PendingRegistration {
+  phone: string;
+  language: SupportedLanguage;
+}
+
+// In-memory store for users who shared contact and are prompted for their name
+export const pendingRegistrations = new Map<number, PendingRegistration>();
+
 /**
  * Handles verified phone contact sharing
  */
@@ -91,29 +99,35 @@ export async function handleContact(ctx: Context) {
   if (!contact || !from) return;
 
   const userLang = await getUserLanguage(ctx);
-  const t = I18N[userLang];
 
-  const fullName = [from.first_name, from.last_name].filter(Boolean).join(' ') || 'Participant';
-  let phone = contact.phone_number;
-  if (!phone.startsWith('+') && !phone.startsWith('0')) {
-    phone = '+' + phone;
+  let phone = String(contact.phone_number).trim().replace(/[^\d+]/g, '');
+  if (!phone.startsWith('+')) {
+    if (phone.startsWith('0')) {
+      phone = '+251' + phone.substring(1);
+    } else if (phone.startsWith('251')) {
+      phone = '+' + phone;
+    } else {
+      phone = '+251' + phone;
+    }
   }
 
-  // Upsert user and participant with selected language
-  await dbService.upsertUser({
-    telegramId: from.id,
-    username: from.username,
-    fullName,
-    phoneNumber: phone,
+  // Save pending contact info awaiting full name
+  pendingRegistrations.set(from.id, {
+    phone,
     language: userLang
   });
 
-  await ctx.reply(
-    t.regSuccess(fullName),
-    Markup.removeKeyboard()
-  );
+  const promptName = 
+    userLang === 'am' 
+      ? `📱 *ስልክ ቁጥርዎ (+${phone.replace(/^\+/, '')}) ተረጋግጧል!*\n\n👤 *እባክዎ ሙሉ ስምዎን (የመጀመሪያ እና የአባት ስም) ይጻፉልን፦*\n_(ይህ ስም አሸናፊ ሲሆኑ ቲኬትዎን ለመለየት እና ሽልማትዎን ለመቀበል ያገለግላል)_`
+      : userLang === 'om'
+      ? `📱 *Lakkoofsi bilbilaa keessan mirkanaa'eera!*\n\n👤 *Maaloo maqaa keessan guutuu (maqaa fi maqaa abbaa) nuuf barreessaa:*\n_(Maqaan kun yeroo mo'attan tikkeettii keessan mirkaneeffachuuf fayyada)_`
+      : `📱 *Phone number (+${phone.replace(/^\+/, '')}) verified!*\n\n👤 *Now please enter your full name (First & Last Name):*\n_(This name will be registered to your tickets and used for claiming prizes)_`;
 
-  return showMainMenu(ctx, userLang);
+  await ctx.reply(promptName, {
+    parse_mode: 'Markdown',
+    ...Markup.removeKeyboard()
+  });
 }
 
 /**

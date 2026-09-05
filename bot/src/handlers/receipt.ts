@@ -1,11 +1,11 @@
-import { Context } from 'telegraf';
+import { Context, Markup } from 'telegraf';
 import fetch from 'node-fetch';
 import { supabase, dbService } from '../services/supabase.js';
 import { veritasService, VeritasService } from '../services/veritas.js';
 import { directVerifier } from '../services/directVerifier.js';
 import { localOcrService } from '../services/localOcr.js';
 import { I18N } from '../i18n.js';
-import { getUserLanguage } from './start.js';
+import { getUserLanguage, pendingRegistrations, showMainMenu, userLanguageCache } from './start.js';
 
 /**
  * Handle Photo Payment Receipts
@@ -320,7 +320,7 @@ export async function handleReceiptDocument(ctx: Context) {
 }
 
 /**
- * Handle Text Messages (References, SMS, Inquiries) - NEVER LEAVES USER ON SEEN
+ * Handle Text Messages (References, Full Name Registration, SMS, Inquiries) - NEVER LEAVES USER ON SEEN
  */
 export async function handleReceiptText(ctx: Context) {
   const text = ((ctx.message as any)?.text || '').trim();
@@ -329,6 +329,40 @@ export async function handleReceiptText(ctx: Context) {
 
   const userLang = await getUserLanguage(ctx);
   const t = I18N[userLang];
+
+  // 1. Check if user is completing registration by entering their full name
+  if (pendingRegistrations.has(telegramId)) {
+    const pending = pendingRegistrations.get(telegramId)!;
+    const fullName = text.trim();
+
+    if (fullName.length < 2 || fullName.startsWith('/')) {
+      return ctx.reply(
+        userLang === 'am' ? '⚠️ እባክዎ ትክክለኛ ሙሉ ስምዎን (የመጀመሪያ እና የአባት ስም) ያስገቡ:' :
+        userLang === 'om' ? '⚠️ Maaloo maqaa keessan guutuu sirrii nuuf galchaa:' :
+        '⚠️ Please enter a valid full name (First & Last Name):'
+      );
+    }
+
+    pendingRegistrations.delete(telegramId);
+
+    await dbService.upsertUser({
+      telegramId,
+      username: ctx.from?.username,
+      fullName,
+      phoneNumber: pending.phone,
+      language: pending.language
+    });
+
+    userLanguageCache.set(telegramId, pending.language);
+
+    const successMsg = 
+      userLang === 'am' ? `✅ *እንኳን ደህና መጡ ${fullName}! ምዝገባዎ በተሳካ ሁኔታ ተጠናቋል!*\n\nአሁን የሎተሪ ዕጣዎችን መቁረጥ፣ ቲኬቶችዎን መከታተል እና ማሳወቂያዎችን ማግኘት ይችላሉ።` :
+      userLang === 'om' ? `✅ *Baga nagaan dhuftan ${fullName}! Galmeen keessan milkaa'inaan xumurameera!*\n\nAmma lootarii qabachuu, tikkeettii hordofuu fi beeksisa argachuuf qophiidha.` :
+      `✅ *Welcome ${fullName}! Your registration is complete!*\n\nYou can now reserve tickets, track your entries, and receive instant draw notifications.`;
+
+    await ctx.reply(successMsg, { parse_mode: 'Markdown' });
+    return showMainMenu(ctx, pending.language);
+  }
 
   // Check if user sent CBE FT number, modern mbreciept link/token, or Telebirr code/SMS
   const mbreceiptMatch = text.match(/(?:https?:\/\/)?mbrecie?pt\.cbe\.com\.et\/([a-zA-Z0-9_-]+)/i) || text.match(/\b(v2-[a-zA-Z0-9_-]{12,})\b/i);
@@ -340,13 +374,16 @@ export async function handleReceiptText(ctx: Context) {
   if (!cbeMatch && !telebirrMatch) {
     const participantId = await dbService.getParticipantId(telegramId);
     if (!participantId) {
-      return ctx.reply(t.unrecognizedMessage, {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: t.menuActiveLotteries, callback_data: 'nav_active_lotteries' }],
-            [{ text: t.menuHelp, callback_data: 'nav_help' }]
-          ]
-        }
+      const regPrompt =
+        userLang === 'am' ? '⚠️ *ቲኬት ከመቁረጥዎ እና ከመሳተፍዎ በፊት እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያጋሩ 📱*\n\nይህም ቲኬቶችዎን ለመከታተል እና አሸናፊ ሲሆኑ ማሳወቂያ ለመላክ ያገለግላል።' :
+        userLang === 'om' ? '⚠️ *Tikkeettii qabachuun dura maaloo lakkoofsa bilbilaa keessan nuuf qoodaa 📱*' :
+        '⚠️ *Before reserving tickets, please register your phone number 📱*\n\nThis allows you to track your tickets and receive draw notifications.';
+
+      return ctx.reply(regPrompt, {
+        parse_mode: 'Markdown',
+        ...Markup.keyboard([
+          [Markup.button.contactRequest(I18N[userLang].shareContactButton)]
+        ]).resize().oneTime()
       });
     }
 

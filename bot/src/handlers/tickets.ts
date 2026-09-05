@@ -55,7 +55,17 @@ export async function handleReserveTicket(ctx: Context, eventId: string, ticketN
 
   const participantId = await dbService.getParticipantId(telegramId);
   if (!participantId) {
-    return ctx.reply('⚠️ Please register your phone number first using /start before reserving a ticket.');
+    const regPrompt =
+      userLang === 'am' ? '⚠️ *ቲኬት ከመቁረጥዎ በፊት እባክዎ መጀመሪያ ይመዝገቡ!*\n\nምዝገባው ቲኬቶችዎን ለመከታተል፣ ክፍያዎን ለማረጋገጥ እና አሸናፊ ሲሆኑ ማሳወቂያ ለመላክ ያገለግላል።' :
+      userLang === 'om' ? '⚠️ *Tikkeettii qabachuu dura maaloo dura galmaa\'aa!*\n\nGalmeen kun tikkeettii hordofuu fi beeksisa argachuuf fayyada.' :
+      '⚠️ *Please complete registration before reserving a ticket!*\n\nRegistration allows you to track your tickets, verify payments, and receive draw notifications.';
+
+    return ctx.reply(regPrompt, {
+      parse_mode: 'Markdown',
+      ...Markup.keyboard([
+        [Markup.button.contactRequest(I18N[userLang].shareContactButton)]
+      ]).resize().oneTime()
+    });
   }
 
   const result = await dbService.reserveTicket(eventId, ticketNumber, participantId);

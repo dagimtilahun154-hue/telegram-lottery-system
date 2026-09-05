@@ -18,6 +18,20 @@ export class DatabaseService {
     language: string;
   }) {
     try {
+      // 1. Pre-check: If phone_number is already used by an old telegram_id record, clean it up to prevent PostgreSQL unique constraint violations
+      const { data: phoneConflict } = await supabase
+        .from('users')
+        .select('telegram_id')
+        .eq('phone_number', user.phoneNumber)
+        .neq('telegram_id', user.telegramId)
+        .maybeSingle();
+
+      if (phoneConflict) {
+        console.log(`[DatabaseService] Re-assigning phone ${user.phoneNumber} from old telegram_id ${phoneConflict.telegram_id} to ${user.telegramId}`);
+        await supabase.from('users').delete().eq('telegram_id', phoneConflict.telegram_id);
+      }
+
+      // 2. Upsert user
       const { data, error } = await supabase
         .from('users')
         .upsert({
@@ -33,17 +47,18 @@ export class DatabaseService {
 
       if (error) throw error;
 
-      // Ensure participant record exists
+      // 3. Ensure participant record exists (check by user_id or phone_number)
       const { data: existingP } = await supabase
         .from('participants')
         .select('id')
-        .eq('user_id', user.telegramId)
+        .or(`user_id.eq.${user.telegramId},phone_number.eq.${user.phoneNumber}`)
         .maybeSingle();
 
       if (existingP?.id) {
         await supabase
           .from('participants')
           .update({
+            user_id: user.telegramId,
             full_name: user.fullName,
             phone_number: user.phoneNumber,
             telegram_username: user.username || null,
@@ -120,6 +135,20 @@ export class DatabaseService {
       .maybeSingle();
 
     if (user && user.phone_number) {
+      const { data: partByPhone } = await supabase
+        .from('participants')
+        .select('id')
+        .eq('phone_number', user.phone_number)
+        .maybeSingle();
+
+      if (partByPhone?.id) {
+        await supabase
+          .from('participants')
+          .update({ user_id: telegramId, full_name: user.full_name })
+          .eq('id', partByPhone.id);
+        return partByPhone.id;
+      }
+
       const { data: newPart } = await supabase
         .from('participants')
         .insert({

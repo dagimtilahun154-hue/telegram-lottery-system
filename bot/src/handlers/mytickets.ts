@@ -12,11 +12,17 @@ export async function handleMyTickets(ctx: Context) {
 
   const participantId = await dbService.getParticipantId(telegramId);
   if (!participantId) {
-    return ctx.reply(
-      userLang === 'am' ? '⚠️ እባክዎ መጀመሪያ በ /start ስልክ ቁጥርዎን ይመዝግቡ።' :
-      userLang === 'om' ? '⚠️ Maaloo dura /start fayyadamuun galmaa\'aa.' :
-      '⚠️ Please register your phone number first using /start.'
-    );
+    const regPrompt =
+      userLang === 'am' ? '⚠️ *የእርስዎን ቲኬቶች ለመመልከት እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያጋሩ 📱*' :
+      userLang === 'om' ? '⚠️ *Tikkeettii keessan ilaaluuf dura bilbila keessan nuuf qoodaa 📱*' :
+      '⚠️ *To view and track your tickets, please share your contact first 📱*';
+
+    return ctx.reply(regPrompt, {
+      parse_mode: 'Markdown',
+      ...Markup.keyboard([
+        [Markup.button.contactRequest(I18N[userLang].shareContactButton)]
+      ]).resize().oneTime()
+    });
   }
 
   const tickets = await dbService.getUserTickets(participantId);

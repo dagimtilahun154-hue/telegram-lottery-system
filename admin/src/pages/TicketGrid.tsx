@@ -61,7 +61,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
   const totalSold = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'ISSUED').length;
   const totalReserved = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'RESERVED').length;
   const totalReview = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'MANUAL_REVIEW').length;
-  const totalAvailable = (currentEvent?.total_tickets || 5000) - (totalSold + totalReserved + totalReview);
+  const totalAvailable = Math.max(0, (currentEvent?.total_tickets || 0) - (totalSold + totalReserved + totalReview));
 
   const getTicketDesign = (status: TicketStatus) => {
     switch (status) {

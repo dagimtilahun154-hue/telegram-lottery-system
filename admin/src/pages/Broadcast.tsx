@@ -40,11 +40,41 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>(() => {
     try {
       const saved = localStorage.getItem('lottery_admin_broadcasts');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Purge any legacy mock records that had 2450
+        return parsed.filter((b: any) => b.total_recipients !== 2450 && b.successful_deliveries !== 2441);
+      }
+      return [];
     } catch {
       return [];
     }
   });
+
+  const [liveAudienceCount, setLiveAudienceCount] = useState<number>(1);
+
+  // Fetch real registered audience count from Supabase
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchAudience() {
+      try {
+        const { count, error } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+        if (!error && count !== null && isMounted) {
+          setLiveAudienceCount(Math.max(1, count));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch user count:', err);
+      }
+    }
+    fetchAudience();
+    const timer = setInterval(fetchAudience, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   // Fetch live broadcasts from Supabase on mount and poll
   useEffect(() => {
@@ -82,7 +112,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
     }
 
     loadBroadcasts();
-    const timer = setInterval(loadBroadcasts, 10000);
+    const timer = setInterval(loadBroadcasts, 5000);
     return () => {
       isMounted = false;
       clearInterval(timer);
@@ -113,6 +143,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
 
     const isValidUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
     const sanitizedEventId = (targetEventId && targetEventId !== 'ALL' && isValidUuid(targetEventId)) ? targetEventId : null;
+    const realAudience = destination === 'CHANNEL' ? 1 : liveAudienceCount;
 
     const newBc: Broadcast = {
       id: crypto.randomUUID(),
@@ -123,10 +154,10 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
       button_text: buttonText || null,
       button_url: buttonUrl || null,
       target_language: targetLanguage,
-      total_recipients: destination === 'CHANNEL' ? 1 : 2450,
-      successful_deliveries: destination === 'CHANNEL' ? 1 : 2441,
+      total_recipients: realAudience,
+      successful_deliveries: 0,
       failed_deliveries: 0,
-      status: 'SENT',
+      status: 'SENDING',
       sent_at: 'Just now',
       created_at: new Date().toISOString()
     };
@@ -144,7 +175,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
           button_url: buttonUrl || null,
           target_language: targetLanguage,
           status: 'SENDING', // signals bot broadcastWorker to dispatch
-          total_recipients: destination === 'CHANNEL' ? 1 : 0
+          total_recipients: realAudience
         }).select();
 
         if (bcError) {
@@ -384,7 +415,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
             {/* Submit Action */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
               <div className="text-xs text-slate-500 font-medium">
-                Audience: <strong className="text-slate-900 font-bold">~2,450 users + Channels</strong>
+                Audience: <strong className="text-slate-900 font-bold">{liveAudienceCount} registered user{liveAudienceCount === 1 ? '' : 's'} {destination === 'CHANNEL' ? '(Channel Only)' : destination === 'ALL' ? '+ Channels' : '(Direct Messages)'}</strong>
               </div>
 
               <button
@@ -445,7 +476,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
                   {previewMode === 'channel' ? (channelTarget || 'Richo Official Channel') : 'Richo Lottery Bot'}
                 </div>
                 <div className="text-[10px] text-slate-500 font-medium">
-                  {previewMode === 'channel' ? '12,400 subscribers' : 'bot • verified'}
+                  {previewMode === 'channel' ? (channelTarget || '@MyLotteryChannel') : `${liveAudienceCount} registered participant${liveAudienceCount === 1 ? '' : 's'}`}
                 </div>
               </div>
             </div>
