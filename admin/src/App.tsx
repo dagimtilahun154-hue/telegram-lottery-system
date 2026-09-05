@@ -1,110 +1,305 @@
-import { useState } from 'react';
-import { LayoutDashboard, Ticket, CheckSquare, ShoppingBag, Radio, LogOut, Menu, X, ShieldCheck } from 'lucide-react';
-import { Login } from './pages/Login';
+import React, { useState, useEffect } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { TopNavbar } from './components/TopNavbar';
+import { ReceiptModal } from './components/ReceiptModal';
 import { Dashboard } from './pages/Dashboard';
-import { LotteryManager } from './pages/LotteryManager';
+import { Events } from './pages/Events';
 import { Purchases } from './pages/Purchases';
-import { Verification } from './pages/Verification';
-import { Broadcast } from './pages/Broadcast';
-import './index.css';
+import { TicketGrid } from './pages/TicketGrid';
+import { BroadcastPage } from './pages/Broadcast';
+import { ManualSales } from './pages/ManualSales';
+import { Winners } from './pages/Winners';
+import { Reports } from './pages/Reports';
+import { Settings } from './pages/Settings';
+import { Login } from './pages/Login';
+import { isAuthenticated, logout, getSessionUser } from './lib/auth';
+import { fetchLiveEvents, fetchLivePurchases, supabase } from './lib/supabase';
+import { LotteryEvent, PurchaseRecord } from './types';
+import { I18nProvider } from './lib/i18n';
 
-const navItems = [
-  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { id: 'lottery', icon: Ticket, label: 'Lottery Manager' },
-  { id: 'verification', icon: CheckSquare, label: 'Verification' },
-  { id: 'purchases', icon: ShoppingBag, label: 'Purchases' },
-  { id: 'broadcast', icon: Radio, label: 'Broadcast Studio' },
-];
+function AdminContent() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => isAuthenticated());
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedEventId, setSelectedEventId] = useState('ALL');
 
-function App() {
-  const [isAuth, setIsAuth] = useState(() => localStorage.getItem('admin_auth') === 'true');
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Real State: ZERO mock data, ZERO fake fallbacks
+  const [events, setEvents] = useState<LotteryEvent[]>(() => {
+    try {
+      const saved = localStorage.getItem('lottery_admin_events');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  if (!isAuth) {
-    return <Login onLogin={() => setIsAuth(true)} />;
-  }
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('lottery_admin_purchases');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  const handleNavClick = (pageId: string) => {
-    setCurrentPage(pageId);
-    setMobileMenuOpen(false);
+  const [activeReceiptPurchase, setActiveReceiptPurchase] = useState<any>(null);
+
+  // Fetch real live records from Supabase on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      const [liveEvents, livePurchases] = await Promise.all([
+        fetchLiveEvents(),
+        fetchLivePurchases()
+      ]);
+      if (isMounted) {
+        if (liveEvents && liveEvents.length > 0) {
+          setEvents(liveEvents);
+          localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents));
+        }
+        if (livePurchases && livePurchases.length > 0) {
+          setPurchases(livePurchases);
+          localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases));
+        }
+      }
+    }
+    loadData();
+    return () => { isMounted = false; };
+  }, []);
+
+  const currentUser = getSessionUser() || 'Richo@123';
+
+  const handleLogout = () => {
+    logout();
+    setIsLoggedIn(false);
   };
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'dashboard': return <Dashboard />;
-      case 'lottery': return <LotteryManager />;
-      case 'verification': return <Verification />;
-      case 'purchases': return <Purchases />;
-      case 'broadcast': return <Broadcast />;
-      default: return <Dashboard />;
+  if (!isLoggedIn) {
+    return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
+  }
+
+  const pendingReviewCount = purchases.filter(p => p.status === 'MANUAL_REVIEW').length;
+
+  const handleAddEvent = (newEvent: LotteryEvent) => {
+    const updated = [newEvent, ...events];
+    setEvents(updated);
+    localStorage.setItem('lottery_admin_events', JSON.stringify(updated));
+
+    // Persist to Supabase if configured
+    supabase.from('lottery_events').insert({
+      id: newEvent.id,
+      title: newEvent.title,
+      slug: newEvent.slug,
+      description: newEvent.description,
+      image_url: newEvent.image_url,
+      ticket_price: newEvent.ticket_price,
+      start_number: newEvent.start_number,
+      end_number: newEvent.end_number,
+      total_tickets: newEvent.total_tickets,
+      payment_provider: newEvent.payment_provider,
+      receiver_account_number: newEvent.receiver_account_number,
+      receiver_name: newEvent.receiver_name,
+      sales_start_at: newEvent.sales_start_at,
+      sales_end_at: newEvent.sales_end_at,
+      draw_at: newEvent.draw_at,
+      status: newEvent.status
+    }).then(({ error }) => {
+      if (error) console.warn('[Supabase] Event save notice:', error.message);
+    });
+  };
+
+  const handleUpdateEventStatus = (eventId: string, newStatus: any) => {
+    const updated = events.map(e => e.id === eventId ? { ...e, status: newStatus } : e);
+    setEvents(updated);
+    localStorage.setItem('lottery_admin_events', JSON.stringify(updated));
+    supabase.from('lottery_events').update({ status: newStatus }).eq('id', eventId).then();
+  };
+
+  const handleAddManualSale = (newSale: any) => {
+    const updatedPurchases = [newSale, ...purchases];
+    setPurchases(updatedPurchases);
+    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+
+    const updatedEvents = events.map(e => {
+      if (e.id === newSale.eventId) {
+        const sold = (e.sold_tickets || 0) + 1;
+        return {
+          ...e,
+          sold_tickets: sold,
+          revenue: (e.revenue || 0) + newSale.amount
+        };
+      }
+      return e;
+    });
+    setEvents(updatedEvents);
+    localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
+  };
+
+  const handleApprovePayment = (id: string, notes?: string) => {
+    const updatedPurchases = purchases.map(p => {
+      if (p.id === id) {
+        return { ...p, status: 'ISSUED' as const, rejectionReason: null };
+      }
+      return p;
+    });
+    setPurchases(updatedPurchases);
+    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+
+    const approved = purchases.find(p => p.id === id);
+    if (approved) {
+      const updatedEvents = events.map(e => {
+        if (e.id === approved.eventId) {
+          const sold = (e.sold_tickets || 0) + 1;
+          return {
+            ...e,
+            sold_tickets: sold,
+            revenue: (e.revenue || 0) + approved.amount
+          };
+        }
+        return e;
+      });
+      setEvents(updatedEvents);
+      localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
     }
+
+    supabase.from('payments').update({ status: 'VERIFIED' }).eq('id', id).then();
+    setActiveReceiptPurchase(null);
+  };
+
+  const handleRejectPayment = (id: string, reason: string) => {
+    const updatedPurchases = purchases.map(p => {
+      if (p.id === id) {
+        return { ...p, status: 'REJECTED' as const, rejectionReason: reason };
+      }
+      return p;
+    });
+    setPurchases(updatedPurchases);
+    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+
+    supabase.from('payments').update({ status: 'REJECTED', rejection_reason: reason }).eq('id', id).then();
+    setActiveReceiptPurchase(null);
   };
 
   return (
-    <div className="app-layout">
-      {/* Mobile Header Bar */}
-      <header className="mobile-header">
-        <div className="mobile-header-brand">
-          <ShieldCheck size={20} color="var(--primary-accent)" />
-          <span>Lottery Admin</span>
-        </div>
-        <button
-          className="mobile-toggle-btn"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle Navigation Menu"
-        >
-          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </header>
-
-      {/* Overlay backdrop */}
-      {mobileMenuOpen && (
-        <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} />
-      )}
-
-      {/* Sidebar Navigation */}
-      <aside className={`sidebar ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-logo">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ShieldCheck size={22} color="var(--primary-accent)" />
-            <h1>Lottery Admin</h1>
-          </div>
-          <p>Management & Operations</p>
-        </div>
-
-        <ul className="nav-list">
-          {navItems.map((item) => {
-            const IconComponent = item.icon;
-            const isActive = currentPage === item.id;
-            return (
-              <li key={item.id}>
-                <button
-                  className={`nav-link ${isActive ? 'active' : ''}`}
-                  onClick={() => handleNavClick(item.id)}
-                >
-                  <IconComponent size={18} />
-                  <span>{item.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-
-        <button
-          className="nav-link logout-btn"
-          onClick={() => { localStorage.removeItem('admin_auth'); setIsAuth(false); }}
-        >
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
-      </aside>
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans antialiased overflow-hidden selection:bg-blue-100 selection:text-blue-900">
+      {/* Sidebar */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        events={events}
+        selectedEventId={selectedEventId}
+        setSelectedEventId={setSelectedEventId}
+        pendingReviewCount={pendingReviewCount}
+        onLogout={handleLogout}
+      />
 
       {/* Main Content Area */}
-      <main className="main-content">
-        {renderPage()}
-      </main>
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top Navbar */}
+        <TopNavbar 
+          events={events}
+          selectedEventId={selectedEventId}
+          setSelectedEventId={setSelectedEventId}
+          currentUser={currentUser}
+          pendingReviewCount={pendingReviewCount}
+          onLogout={handleLogout}
+        />
+
+        {/* Dynamic Page View */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              events={events}
+              purchases={purchases}
+              onSelectEvent={setSelectedEventId}
+              onNavigate={setActiveTab}
+              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+            />
+          )}
+
+          {activeTab === 'events' && (
+            <Events 
+              events={events}
+              onAddEvent={handleAddEvent}
+              onUpdateEventStatus={handleUpdateEventStatus}
+              onSelectEvent={(id) => {
+                setSelectedEventId(id);
+                setActiveTab('ticket-grid');
+              }}
+            />
+          )}
+
+          {activeTab === 'purchases' && (
+            <Purchases 
+              purchases={purchases}
+              events={events}
+              selectedEventId={selectedEventId}
+              onSelectEventId={setSelectedEventId}
+              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+            />
+          )}
+
+          {activeTab === 'ticket-grid' && (
+            <TicketGrid 
+              events={events}
+              selectedEventId={selectedEventId}
+              onSelectEventId={setSelectedEventId}
+              purchases={purchases}
+              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+            />
+          )}
+
+          {activeTab === 'broadcast' && (
+            <BroadcastPage 
+              events={events}
+            />
+          )}
+
+          {activeTab === 'manual-sales' && (
+            <ManualSales 
+              events={events}
+              purchases={purchases}
+              onAddManualSale={handleAddManualSale}
+            />
+          )}
+
+          {activeTab === 'winners' && (
+            <Winners 
+              events={events}
+              purchases={purchases}
+            />
+          )}
+
+          {activeTab === 'reports' && (
+            <Reports 
+              events={events}
+              purchases={purchases}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <Settings />
+          )}
+        </main>
+      </div>
+
+      {/* Universal Receipt Review Modal */}
+      {activeReceiptPurchase && (
+        <ReceiptModal 
+          purchase={activeReceiptPurchase}
+          onClose={() => setActiveReceiptPurchase(null)}
+          onApprove={(id, notes) => handleApprovePayment(id, notes)}
+          onReject={(id, reason) => handleRejectPayment(id, reason)}
+        />
+      )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <I18nProvider>
+      <AdminContent />
+    </I18nProvider>
   );
 }
 

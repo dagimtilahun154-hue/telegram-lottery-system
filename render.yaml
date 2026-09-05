@@ -1,19 +1,28 @@
 services:
-  - type: worker
-    name: telegram-lottery-bot
-    env: node
+  - type: web
+    name: richo-ekub-bot
+    runtime: node
     plan: free
+    region: oregon
     rootDir: bot
-    buildCommand: npm install
+    buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: VERITAS_API_URL
+        value: https://verifyapi.leulzenebe.pro
       - key: BOT_TOKEN
         sync: false
       - key: SUPABASE_URL
-        value: https://kbtrohguymjxnzizkimq.supabase.co
-      - key: SUPABASE_SERVICE_KEY
         sync: false
-      - key: SUPABASE_ANON_KEY
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: MINI_APP_URL
-        value: https://mini-app-ten-orpin.vercel.app
+      - key: VERITAS_API_KEY
+        sync: false
+      - key: VERITAS_API_KEYS
+        sync: false

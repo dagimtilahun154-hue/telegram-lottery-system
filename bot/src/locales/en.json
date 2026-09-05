@@ -1,74 +1,26 @@
 {
-  "start": "Welcome! 👋\nPlease register to access the lottery system.",
-  "register_prompt": "📱 Tap the button below to share your phone number and register.",
-  "register_success": "✅ Registration successful! Welcome, {name}!\nYou now have full access to our lottery system.",
-  "already_registered": "You're already registered! Use the menu below.",
-  "language_changed": "🌐 Language changed to English.",
-
-  "menu": {
-    "register": "📱 Register",
-    "buy_ticket": "🎟️ Buy Ticket",
-    "my_tickets": "📋 My Tickets",
-    "draws": "📅 Active Draws",
-    "language": "🌐 Language",
-    "support": "❓ Support"
-  },
-
-  "items": {
-    "select": "🎟️ Choose a lottery item:",
-    "none_active": "No active lottery items right now. Check back soon!",
-    "details": "🎁 {title}\n💰 Ticket Price: {price}\n📊 Available: {available}/{total} spots\n📅 Ends: {end_date}\n\nType your spot numbers (e.g. 5, 17, 42) or type 'random 3' for 3 random spots:",
-    "invalid_input": "❌ Invalid input. Please type spot numbers separated by commas (e.g. 5, 17, 42) or 'random 3'.",
-    "spots_taken": "❌ These spots are already taken: {spots}. Please choose different numbers.",
-    "spots_out_of_range": "❌ Spot numbers must be between 1 and {max}.",
-    "too_many_spots": "❌ You can select up to {max} spots at a time."
-  },
-
-  "reservation": {
-    "success": "✅ Spots reserved! You have 15 minutes to complete payment.\n\n🔢 Your spots: {spots}\n💰 Total: {total}\n🆔 Reference: {ref}\n\n💳 Payment Instructions:\n\n📱 Telebirr: Send to 09XXXXXXXX\n🏦 CBE: Account XXXXXXXXXX\n\n⚠️ Include reference {ref} in your payment.\n\nAfter paying, send your payment screenshot here.",
-    "expired": "⏰ Your reservation for spots {spots} has expired. The spots are now available again.",
-    "pending": "⏳ You have a pending reservation. Complete payment first or wait for it to expire."
-  },
-
-  "receipt": {
-    "processing": "📸 Processing your receipt...",
-    "success": "✅ Receipt received!\n🔢 Reference: {ref}\n\nYour payment is being reviewed. You'll be notified once confirmed.",
-    "ocr_failed": "⚠️ Could not read the reference number from your screenshot. It will be reviewed manually by an admin.",
-    "no_pending": "You don't have any pending reservations. Buy a ticket first!",
-    "duplicate_ref": "❌ This payment reference has already been used. Please send a different receipt."
-  },
-
-  "tickets": {
-    "header": "📋 Your Tickets\n",
-    "none": "You haven't purchased any tickets yet.",
-    "item_header": "\n🎁 {title}",
-    "entry": "  #{spot} — {status_emoji} {status}",
-    "status": {
-      "PENDING_PAYMENT": "⏳ Pending Payment",
-      "CONFIRMED": "✅ Confirmed",
-      "CANCELLED": "❌ Cancelled"
-    }
-  },
-
-  "draws": {
-    "header": "📅 Active Draws\n",
-    "none": "No active draws at the moment.",
-    "entry": "\n🎁 {title}\n💰 Price: {price}\n📊 {sold}/{total} spots sold\n📅 Draw: {draw_date}\n⏱️ Time left: {time_left}\n"
-  },
-
-  "broadcast": {
-    "new_item": "🆕 NEW LOTTERY ITEM!\n\n🎁 {title}\n{description}\n💰 Ticket Price: {price}\n📊 {total} spots available\n📅 Ends: {end_date}\n\nDon't miss out! Buy your tickets now! 🎟️",
-    "winner": "🎉 WINNER ANNOUNCED! 🎉\n\n🎁 {title}\n🏆 Winning Number: #{spot}\n📱 Winner: {phone}\n\nCongratulations! 🥳",
-    "tiktok_live": "🔴 LIVE DRAW STARTING!\n\n🎁 {title}\n\nThe draw is about to begin on TikTok Live!\nWatch now: {url}\n\nGood luck! 🍀"
-  },
-
-  "admin": {
-    "approved": "✅ Your payment for spots {spots} has been confirmed! Your tickets are now active. Good luck! 🍀",
-    "rejected": "❌ Your payment was not approved.\nReason: {reason}\n\nPlease re-upload a valid receipt or contact support."
-  },
-
-  "errors": {
-    "generic": "Something went wrong. Please try again.",
-    "not_registered": "Please register first using the 📱 Register button."
-  }
+  "welcome": "🎉 Welcome to the Official Lottery Platform!\n\nPlease select your preferred language to begin:",
+  "choose_language": "🌐 Select Language / ቋንቋ ይምረጡ:",
+  "request_contact": "📱 To complete your registration, please share your verified phone number using the button below:",
+  "share_contact_button": "📲 Share Phone Number",
+  "registration_complete": "✅ Registration successful, {name}!\n\nYou can now browse active lotteries and cut your numbers.",
+  "main_menu": "🎯 Main Menu\n\nPlease select an option below:",
+  "btn_active_lotteries": "🎯 Active Lotteries",
+  "btn_my_tickets": "🎫 My Tickets",
+  "btn_results": "🏆 Results & Winners",
+  "btn_language": "🌐 Change Language",
+  "btn_help": "ℹ️ Help & Support",
+  "active_lotteries_title": "🎯 Currently Active Lottery Events:\n\nSelect an event to view prizes, ticket prices, and available numbers:",
+  "event_details": "🎟️ *{title}*\n\n💰 Price: *{price} ETB* per ticket\n🔢 Number Pool: 1 to {total}\n⏳ Sales Close: {salesClose}\n🏆 Draw Date: {drawDate}\n\n💳 *Payment Instructions:*\n• Provider: {provider}\n• Receiver Account: `{account}`\n• Receiver Name: *{name}*\n\nSelect a number range below to pick an available ticket:",
+  "pick_range": "Please select a number range block:",
+  "available_in_range": "Available tickets in range {start} - {end}:\n(Tap any number to reserve for 15 minutes)",
+  "ticket_reserved": "⏳ *Ticket #{number} Reserved for You!*\n\n• Event: *{title}*\n• Ticket Price: *{price} ETB*\n• Time Window: *15 Minutes*\n\n💳 *Send Payment to:*\n• Provider: *{provider}*\n• Receiver Account / Phone: `{account}`\n• Receiver Name: *{name}*\n\n📸 *Important:* Please transfer the exact amount and send a screenshot of the payment receipt here before the 15-minute countdown expires!\n\n_Note: You can only have 1 active ticket reserved at a time._",
+  "active_reservation_blocked": "⚠️ *Active Reservation Detected*\n\nYou already have Ticket #{number} reserved for *{title}*.\n\nPlease complete your payment for Ticket #{number} or wait for its 15-minute timer to expire before cutting another ticket.",
+  "number_unavailable": "❌ Number #{number} has just been taken by another user or is no longer available. Please select another number.",
+  "payment_received": "🔍 *Payment Screenshot Received!*\n\nExtracting reference and verifying with bank/telebirr via Veritas Engine...\nPlease wait a moment.",
+  "payment_verified_issued": "🎉 *Payment Verified & Ticket #{number} Issued!*\n\n• Event: *{title}*\n• Amount Paid: *{amount} ETB*\n• Transaction Reference: `{reference}`\n• Ticket Number: *#{number}*\n\nYour ticket has been officially registered! Good luck in the upcoming draw.\n\nYou can now cut another ticket if you wish!",
+  "payment_manual_review": "⏳ *Payment Queued for Staff Verification*\n\nWe received your payment receipt for Ticket #{number}, but automated verification flagged an issue:\n_{reason}_\n\nDon't worry! Your ticket remains safely locked for you while our admin staff inspects your receipt manually.",
+  "payment_duplicate": "❌ *Duplicate Reference Detected*\n\nThis payment reference (`{reference}`) has already been used for another ticket. Reuse of receipts is strictly prohibited.",
+  "no_tickets_yet": "You haven't purchased any tickets yet. Tap Active Lotteries to get started!",
+  "my_tickets_header": "🎫 *Your Official Lottery Tickets:*"
 }

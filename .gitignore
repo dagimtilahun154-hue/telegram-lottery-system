@@ -1,20 +1,27 @@
-# Node modules
+# Dependencies
 node_modules/
-**/node_modules/
+*/node_modules/
 
-# Production builds
-dist/
-**/dist/
-
-# Environment files (secrets)
+# Environment variables
 .env
-.env.local
-**/.env
-**/.env.local
+.env.*
+!.env.example
+bot/.env
+admin/.env
+admin/.env.local
 
-# IDE & OS
+# Production build artifacts
+dist/
+admin/dist/
+bot/dist/
+
+# Scratch & temporary files
+hf_space/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS metadata
 .DS_Store
 Thumbs.db
-.vscode/
-.idea/
-*.log
