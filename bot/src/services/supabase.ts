@@ -33,16 +33,34 @@ export class DatabaseService {
 
       if (error) throw error;
 
-      // Also ensure participant record exists
-      await supabase
+      // Ensure participant record exists
+      const { data: existingP } = await supabase
         .from('participants')
-        .upsert({
-          user_id: user.telegramId,
-          full_name: user.fullName,
-          phone_number: user.phoneNumber,
-          telegram_username: user.username || null,
-          source: 'BOT'
-        }, { onConflict: 'phone_number' });
+        .select('id')
+        .eq('user_id', user.telegramId)
+        .maybeSingle();
+
+      if (existingP?.id) {
+        await supabase
+          .from('participants')
+          .update({
+            full_name: user.fullName,
+            phone_number: user.phoneNumber,
+            telegram_username: user.username || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingP.id);
+      } else {
+        await supabase
+          .from('participants')
+          .insert({
+            user_id: user.telegramId,
+            full_name: user.fullName,
+            phone_number: user.phoneNumber,
+            telegram_username: user.username || null,
+            source: 'BOT'
+          });
+      }
 
       return data;
     } catch (err) {
@@ -82,16 +100,42 @@ export class DatabaseService {
   }
 
   /**
-   * Fetch participant ID by Telegram user ID
+   * Fetch participant ID by Telegram user ID (with automatic fallback to users table)
    */
   async getParticipantId(telegramId: number): Promise<string | null> {
-    const { data } = await supabase
+    // 1. Direct match on participants
+    const { data: part } = await supabase
       .from('participants')
       .select('id')
       .eq('user_id', telegramId)
       .maybeSingle();
 
-    return data?.id || null;
+    if (part?.id) return part.id;
+
+    // 2. Auto-heal: If user has registered phone in users table, create participant entry immediately
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .maybeSingle();
+
+    if (user && user.phone_number) {
+      const { data: newPart } = await supabase
+        .from('participants')
+        .insert({
+          user_id: user.telegram_id,
+          full_name: user.full_name || 'Participant',
+          phone_number: user.phone_number,
+          telegram_username: user.telegram_username || null,
+          source: 'BOT'
+        })
+        .select('id')
+        .single();
+
+      if (newPart?.id) return newPart.id;
+    }
+
+    return null;
   }
 
   /**

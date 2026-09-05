@@ -22,11 +22,16 @@ function AdminContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedEventId, setSelectedEventId] = useState('ALL');
 
-  // Real State: ZERO mock data, ZERO fake fallbacks
+  // Real State: Live Supabase data with 10s auto-refresh
   const [events, setEvents] = useState<LotteryEvent[]>(() => {
     try {
       const saved = localStorage.getItem('lottery_admin_events');
-      return saved ? JSON.parse(saved) : [];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const filtered = parsed.filter((e: any) => !String(e.id).startsWith('evt-'));
+        return filtered;
+      }
+      return [];
     } catch {
       return [];
     }
@@ -43,27 +48,35 @@ function AdminContent() {
 
   const [activeReceiptPurchase, setActiveReceiptPurchase] = useState<any>(null);
 
-  // Fetch real live records from Supabase on mount
+  // Fetch real live records from Supabase on mount and poll every 10 seconds
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
-      const [liveEvents, livePurchases] = await Promise.all([
-        fetchLiveEvents(),
-        fetchLivePurchases()
-      ]);
-      if (isMounted) {
-        if (liveEvents && liveEvents.length > 0) {
-          setEvents(liveEvents);
-          localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents));
+      try {
+        const [liveEvents, livePurchases] = await Promise.all([
+          fetchLiveEvents(),
+          fetchLivePurchases()
+        ]);
+        if (isMounted) {
+          if (liveEvents && liveEvents.length > 0) {
+            setEvents(liveEvents);
+            localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents));
+          }
+          if (livePurchases) {
+            setPurchases(livePurchases);
+            localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases));
+          }
         }
-        if (livePurchases && livePurchases.length > 0) {
-          setPurchases(livePurchases);
-          localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases));
-        }
+      } catch (err) {
+        console.error('Failed to sync live data:', err);
       }
     }
     loadData();
-    return () => { isMounted = false; };
+    const timer = setInterval(loadData, 10000);
+    return () => { 
+      isMounted = false; 
+      clearInterval(timer);
+    };
   }, []);
 
   const currentUser = getSessionUser() || 'Richo@123';
