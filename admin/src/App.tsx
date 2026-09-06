@@ -168,12 +168,15 @@ function AdminContent() {
         const autoPost = localStorage.getItem('lottery_autopost_events') !== 'false';
 
         if (autoPost) {
+          const descSnippet = newEvent.description ? `\n\n📝 *ሽልማቶች እና ዝርዝር:*\n${newEvent.description}` : '';
+          const receiverInfo = `\n\n👤 *ስም:* ${newEvent.receiver_name || 'Richo Ekup'}\n💳 *${newEvent.payment_provider} 👉* \`${newEvent.receiver_account_number}\``;
+
           await supabase.from('broadcasts').insert({
             event_id: newEvent.id,
-            title: `🎉 አዲስ የሎተሪ ዕጣ ወጥቷል! (${newEvent.title})`,
-            message_text: `<!--destination:ALL--><!--target_channel:${defaultChannel}-->🎉 *አዲስ የሎተሪ ውድድር ይፋ ሆኗል!*\n\n🎟️ *${newEvent.title}*\n💰 የቲኬት ዋጋ፡ *${newEvent.ticket_price} ETB*\n🔢 ጠቅላላ ቲኬቶች፡ *${newEvent.total_tickets}*\n💳 የክፍያ ዘዴ፡ *${newEvent.payment_provider}*\n\nዕድልዎን አሁኑኑ ይሞክሩ! ቲኬት ለመቁረጥ ከታች ያለውን አዝራር ይጫኑ።`,
+            title: `🎉 አዲስ የሎተሪ ውድድር ይፋ ሆኗል! (${newEvent.title})`,
+            message_text: `<!--destination:ALL--><!--target_channel:${defaultChannel}-->✨ *${newEvent.title}*\n\n💰 *የአንድ ዕጣ ዋጋ ${newEvent.ticket_price} ብር ብቻ ነው!* 🏆${descSnippet}${receiverInfo}\n\n🔢 *ጠቅላላ ዕጣዎች:* 1 – ${newEvent.total_tickets}\n🗓️ *የዕጣ ቀን:* ${new Date(newEvent.draw_at).toLocaleString()}\n\n📍 አድራሻ: ኢትዮጵያ | መልካም ዕድል! 🙏\n\nዕድልዎን አሁኑኑ ይሞክሩ! ቲኬት ለመቁረጥ ከታች ያለውን አዝራር ይጫኑ።`,
             image_url: newEvent.image_url || null,
-            button_text: `🎟️ Cut Ticket Now (${newEvent.ticket_price} ETB)`,
+            button_text: `🎟️ ይሄንን ዕጣ ምረጥ (${newEvent.ticket_price} ETB)`,
             button_url: `https://t.me/meklawbot?start=event_${newEvent.id}`,
             target_language: 'ALL',
             status: 'SENDING',

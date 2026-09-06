@@ -20,9 +20,9 @@ interface BroadcastRecord {
 export class BroadcastWorker {
   private bot: Telegraf | null = null;
   private isRunning: boolean = false;
-  private pollIntervalMs: number = 5000;
+  private pollIntervalMs: number = 4000;
   private timer: NodeJS.Timeout | null = null;
-  private defaultChannel: string = process.env.TELEGRAM_CHANNEL || '';
+  private defaultChannel: string = process.env.TELEGRAM_CHANNEL || '@RichoLottery';
 
   init(botInstance: Telegraf) {
     this.bot = botInstance;
@@ -31,7 +31,7 @@ export class BroadcastWorker {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    console.log('📡 Telegram Broadcast & Channel Dispatch Worker started.');
+    console.log('📡 Telegram Broadcast & Channel Dispatch Worker active.');
 
     // Immediate check + schedule recurring polling
     this.checkPendingBroadcasts();
@@ -61,12 +61,9 @@ export class BroadcastWorker {
         .select('*')
         .eq('status', 'SENDING')
         .order('created_at', { ascending: true })
-        .limit(3);
+        .limit(5);
 
-      if (error) {
-        // Suppress repeated schema cache warnings if table does not exist yet
-        return;
-      }
+      if (error) return;
 
       if (pendingBroadcasts && pendingBroadcasts.length > 0) {
         for (const bc of pendingBroadcasts) {
@@ -92,7 +89,7 @@ export class BroadcastWorker {
     // Build CTA inline keyboard if button details provided
     const extraKeyboard = bc.button_text && bc.button_url 
       ? Markup.inlineKeyboard([
-          Markup.button.url(bc.button_text, bc.button_url)
+          [Markup.button.url(bc.button_text, bc.button_url)]
         ])
       : undefined;
 
@@ -110,20 +107,20 @@ export class BroadcastWorker {
       .replace(/<!--target_channel:(.+?)-->/g, '')
       .trim();
 
-    // Formatted message content (HTML)
-    const formattedText = `<b>${this.escapeHtml(bc.title)}</b>\n\n${this.escapeHtml(cleanText)}`;
+    // Formatted message content in clean HTML
+    const formattedHtml = this.formatMessageHtml(bc.title, cleanText);
 
-    // 0. DIRECT SINGLE USER TRANSACTIONAL NOTIFICATION (e.g. ticket approval)
+    // 0. DIRECT SINGLE USER TRANSACTIONAL NOTIFICATION (e.g. ticket approval / winner DM)
     if (targetUserId) {
       try {
-        if (bc.image_url) {
+        if (bc.image_url && bc.image_url.startsWith('http')) {
           await this.bot.telegram.sendPhoto(targetUserId, bc.image_url, {
-            caption: formattedText,
+            caption: formattedHtml,
             parse_mode: 'HTML',
             ...extraKeyboard
           });
         } else {
-          await this.bot.telegram.sendMessage(targetUserId, formattedText, {
+          await this.bot.telegram.sendMessage(targetUserId, formattedHtml, {
             parse_mode: 'HTML',
             ...extraKeyboard
           });
@@ -135,7 +132,6 @@ export class BroadcastWorker {
         failed++;
       }
 
-      // Mark completed
       await supabase
         .from('broadcasts')
         .update({
@@ -158,27 +154,27 @@ export class BroadcastWorker {
       }
 
       try {
-        if (bc.image_url) {
+        if (bc.image_url && bc.image_url.startsWith('http')) {
           await this.bot.telegram.sendPhoto(normalizedChannel, bc.image_url, {
-            caption: formattedText,
+            caption: formattedHtml,
             parse_mode: 'HTML',
             ...extraKeyboard
           });
         } else {
-          await this.bot.telegram.sendMessage(normalizedChannel, formattedText, {
+          await this.bot.telegram.sendMessage(normalizedChannel, formattedHtml, {
             parse_mode: 'HTML',
             ...extraKeyboard
           });
         }
         successful++;
-        console.log(`📢 [BroadcastWorker] Successfully posted to channel/group ${normalizedChannel}`);
+        console.log(`📢 [BroadcastWorker] Successfully posted to channel ${normalizedChannel}`);
       } catch (channelErr: any) {
-        console.warn(`⚠️ [BroadcastWorker] Channel post to ${normalizedChannel} failed: ${channelErr.message}. (Note: Ensure the Telegram Bot is added as an Administrator to this channel/group with 'Post Messages' permission)`);
+        console.warn(`⚠️ [BroadcastWorker] Channel post to ${normalizedChannel} notice: ${channelErr.message}`);
         failed++;
       }
     }
 
-    // 2. DISPATCH DIRECT MESSAGES TO TELEGRAM USERS
+    // 2. DISPATCH DIRECT NOTIFICATIONS TO ALL REGISTERED BOT USERS
     if (destination !== 'CHANNEL' && destination !== 'GROUP') {
       try {
         let query = supabase.from('users').select('telegram_id, language').eq('is_blocked', false);
@@ -191,7 +187,7 @@ export class BroadcastWorker {
 
         if (!userError && users && users.length > 0) {
           const totalUsers = users.length;
-          console.log(`👥 [BroadcastWorker] Found ${totalUsers} recipient users.`);
+          console.log(`👥 [BroadcastWorker] Broadcasting to ${totalUsers} recipient users...`);
 
           // Safe batch rate: 25 messages per second
           const BATCH_SIZE = 25;
@@ -201,22 +197,22 @@ export class BroadcastWorker {
             await Promise.all(
               batch.map(async (user) => {
                 let delivered = false;
-                if (bc.image_url) {
+                if (bc.image_url && bc.image_url.startsWith('http')) {
                   try {
                     await this.bot!.telegram.sendPhoto(user.telegram_id, bc.image_url, {
-                      caption: formattedText,
+                      caption: formattedHtml,
                       parse_mode: 'HTML',
                       ...extraKeyboard
                     });
                     delivered = true;
-                  } catch (photoErr: any) {
-                    console.warn(`[BroadcastWorker] sendPhoto failed for ${user.telegram_id}, falling back to text:`, photoErr.message);
+                  } catch {
+                    // Fallback to text if photo delivery fails
                   }
                 }
 
                 if (!delivered) {
                   try {
-                    await this.bot!.telegram.sendMessage(user.telegram_id, formattedText, {
+                    await this.bot!.telegram.sendMessage(user.telegram_id, formattedHtml, {
                       parse_mode: 'HTML',
                       ...extraKeyboard
                     });
@@ -239,15 +235,13 @@ export class BroadcastWorker {
               await new Promise((res) => setTimeout(res, 1000));
             }
           }
-        } else {
-          console.log('👥 [BroadcastWorker] No recipient users matched criteria in public.users.');
         }
       } catch (usersErr) {
         console.error('[BroadcastWorker] Error fetching users:', usersErr);
       }
     }
 
-    // 3. UPDATE SUPABASE STATUS TO 'SENT'
+    // 3. UPDATE SUPABASE RECORD STATUS TO 'SENT'
     try {
       await supabase
         .from('broadcasts')
@@ -266,91 +260,30 @@ export class BroadcastWorker {
     }
   }
 
-  /**
-   * Helper: Post newly created lottery announcement directly to channel
-   */
-  async postEventLaunch(channelId: string, event: {
-    title: string;
-    ticketPrice: number;
-    totalTickets: number;
-    imageUrl?: string;
-    botUsername: string;
-    eventId: string;
-  }) {
-    if (!this.bot) return;
-
-    const caption = 
-      `🎉 <b>NEW LOTTERY EVENT LAUNCHED!</b>\n\n` +
-      `🎟️ <b>${this.escapeHtml(event.title)}</b>\n` +
-      `💰 Ticket Price: <b>${event.ticketPrice} ETB</b>\n` +
-      `📊 Total Tickets: <b>${event.totalTickets} numbers</b>\n\n` +
-      `⚡ Reserve your lucky number now before tickets sell out!`;
-
-    const keyboard = Markup.inlineKeyboard([
-      Markup.button.url('🎯 Cut Ticket Now', `https://t.me/${event.botUsername}?start=event_${event.eventId}`)
-    ]);
-
-    try {
-      if (event.imageUrl) {
-        await this.bot.telegram.sendPhoto(channelId, event.imageUrl, {
-          caption,
-          parse_mode: 'HTML',
-          ...keyboard
-        });
-      } else {
-        await this.bot.telegram.sendMessage(channelId, caption, {
-          parse_mode: 'HTML',
-          ...keyboard
-        });
-      }
-      return true;
-    } catch (err: any) {
-      console.error(`[BroadcastWorker] Channel event post failed:`, err.message);
-      return false;
-    }
-  }
-
-  /**
-   * Helper: Post official winner declaration to channel
-   */
-  async postWinnerAnnouncement(channelId: string, data: {
-    eventTitle: string;
-    winningTicket: number;
-    winnerName: string;
-    winnerPhoneMasked: string;
-    prize: string;
-    botUsername: string;
-  }) {
-    if (!this.bot) return;
-
-    const message = 
-      `🏆 <b>OFFICIAL WINNER DECLARATION!</b> 🎊\n\n` +
-      `🎉 Event: <b>${this.escapeHtml(data.eventTitle)}</b>\n` +
-      `🎯 Winning Ticket Number: <b>#${data.winningTicket}</b>\n` +
-      `👤 Winner: <b>${this.escapeHtml(data.winnerName)}</b> (${data.winnerPhoneMasked})\n\n` +
-      `✨ Congratulations to the lucky winner! Stay tuned for the next grand lottery!`;
-
-    const keyboard = Markup.inlineKeyboard([
-      Markup.button.url('🏆 View Active Lotteries', `https://t.me/${data.botUsername}`)
-    ]);
-
-    try {
-      await this.bot.telegram.sendMessage(channelId, message, {
-        parse_mode: 'HTML',
-        ...keyboard
-      });
-      return true;
-    } catch (err: any) {
-      console.error(`[BroadcastWorker] Winner announcement failed:`, err.message);
-      return false;
-    }
-  }
-
   private escapeHtml(text: string): string {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  private formatMessageHtml(title: string, body: string): string {
+    let text = this.escapeHtml(body);
+
+    // Convert **bold** and *bold* to <b>bold</b>
+    text = text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    text = text.replace(/\*([^\n\*]+?)\*/g, '<b>$1</b>');
+
+    // Convert _italic_ to <i>italic</i>
+    text = text.replace(/_([^\n_]+?)_/g, '<i>$1</i>');
+
+    // Convert `code` to <code>code</code>
+    text = text.replace(/`([^`]+?)`/g, '<code>$1</code>');
+
+    if (title && title.trim()) {
+      return `<b>${this.escapeHtml(title.trim())}</b>\n\n${text}`;
+    }
+    return text;
   }
 }
 
