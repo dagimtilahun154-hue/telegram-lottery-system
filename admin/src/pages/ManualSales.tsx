@@ -104,7 +104,7 @@ export const ManualSales: React.FC<ManualSalesProps> = ({
       status: 'ISSUED' as const,
       provider: paymentProvider,
       reference: reference || `CASH-${Date.now().toString().slice(-6)}`,
-      receiptUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800',
+      receiptUrl: undefined,
       expectedAccount: currentEvent.receiver_account_number,
       detectedAccount: currentEvent.receiver_account_number,
       expectedName: currentEvent.receiver_name,

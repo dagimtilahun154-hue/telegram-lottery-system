@@ -152,23 +152,28 @@ export class BroadcastWorker {
 
     // 1. DISPATCH TO CONFIGURED CHANNEL(S)
     if (destination !== 'BOT' && destination !== 'USERS' && targetChannel) {
+      let normalizedChannel = targetChannel.trim();
+      if (!normalizedChannel.startsWith('@') && !normalizedChannel.startsWith('-100') && !normalizedChannel.startsWith('-')) {
+        normalizedChannel = '@' + normalizedChannel;
+      }
+
       try {
         if (bc.image_url) {
-          await this.bot.telegram.sendPhoto(targetChannel, bc.image_url, {
+          await this.bot.telegram.sendPhoto(normalizedChannel, bc.image_url, {
             caption: formattedText,
             parse_mode: 'HTML',
             ...extraKeyboard
           });
         } else {
-          await this.bot.telegram.sendMessage(targetChannel, formattedText, {
+          await this.bot.telegram.sendMessage(normalizedChannel, formattedText, {
             parse_mode: 'HTML',
             ...extraKeyboard
           });
         }
         successful++;
-        console.log(`📢 [BroadcastWorker] Successfully posted to channel ${targetChannel}`);
+        console.log(`📢 [BroadcastWorker] Successfully posted to channel/group ${normalizedChannel}`);
       } catch (channelErr: any) {
-        console.warn(`⚠️ [BroadcastWorker] Channel post to ${targetChannel} failed:`, channelErr.message);
+        console.warn(`⚠️ [BroadcastWorker] Channel post to ${normalizedChannel} failed: ${channelErr.message}. (Note: Ensure the Telegram Bot is added as an Administrator to this channel/group with 'Post Messages' permission)`);
         failed++;
       }
     }

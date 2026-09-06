@@ -25,7 +25,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
   const { t } = useI18n();
 
   const [destination, setDestination] = useState<DestinationType>('ALL');
-  const [channelTarget, setChannelTarget] = useState('@RichoLottery');
+  const [channelTarget, setChannelTarget] = useState(() => localStorage.getItem('lottery_channel_handle') || '@RichoLottery');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -42,7 +42,6 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
       const saved = localStorage.getItem('lottery_admin_broadcasts');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Purge any legacy mock records that had 2450
         return parsed.filter((b: any) => b.total_recipients !== 2450 && b.successful_deliveries !== 2441);
       }
       return [];
@@ -51,7 +50,7 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
     }
   });
 
-  const [liveAudienceCount, setLiveAudienceCount] = useState<number>(1);
+  const [liveAudienceCount, setLiveAudienceCount] = useState<number>(0);
 
   // Fetch real registered audience count from Supabase
   useEffect(() => {
@@ -62,14 +61,14 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
           .from('users')
           .select('*', { count: 'exact', head: true });
         if (!error && count !== null && isMounted) {
-          setLiveAudienceCount(Math.max(1, count));
+          setLiveAudienceCount(count);
         }
       } catch (err) {
         console.warn('Failed to fetch user count:', err);
       }
     }
     fetchAudience();
-    const timer = setInterval(fetchAudience, 10000);
+    const timer = setInterval(fetchAudience, 8000);
     return () => {
       isMounted = false;
       clearInterval(timer);
@@ -115,10 +114,23 @@ export const BroadcastPage: React.FC<BroadcastProps> = ({ events }) => {
     }
 
     loadBroadcasts();
-    const timer = setInterval(loadBroadcasts, 5000);
+    const timer = setInterval(loadBroadcasts, 6000);
+
+    const bcChannel = supabase
+      .channel('broadcasts-realtime-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'broadcasts' },
+        () => {
+          loadBroadcasts();
+        }
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
       clearInterval(timer);
+      supabase.removeChannel(bcChannel);
     };
   }, []);
 

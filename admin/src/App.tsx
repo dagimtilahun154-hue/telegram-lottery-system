@@ -48,7 +48,7 @@ function AdminContent() {
 
   const [activeReceiptPurchase, setActiveReceiptPurchase] = useState<any>(null);
 
-  // Fetch real live records from Supabase on mount and poll every 10 seconds
+  // Fetch real live records from Supabase on mount and listen to Realtime changes
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
@@ -58,24 +58,60 @@ function AdminContent() {
           fetchLivePurchases()
         ]);
         if (isMounted) {
-          if (liveEvents && liveEvents.length > 0) {
-            setEvents(liveEvents);
-            localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents));
-          }
-          if (livePurchases) {
-            setPurchases(livePurchases);
-            localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases));
-          }
+          setEvents(liveEvents || []);
+          localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents || []));
+          setPurchases(livePurchases || []);
+          localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases || []));
         }
       } catch (err) {
         console.error('Failed to sync live data:', err);
       }
     }
+
     loadData();
-    const timer = setInterval(loadData, 10000);
+    const timer = setInterval(loadData, 8000);
+
+    // Supabase Realtime Subscription for Instant Bot-to-Admin Sync
+    const channel = supabase
+      .channel('admin-realtime-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments' },
+        () => {
+          console.log('[Realtime] Payment update detected from Bot, refreshing...');
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservations' },
+        () => {
+          console.log('[Realtime] Ticket reservation update detected from Bot, refreshing...');
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'lottery_events' },
+        () => {
+          console.log('[Realtime] Lottery event update detected, refreshing...');
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'broadcasts' },
+        () => {
+          console.log('[Realtime] Broadcast status update detected, refreshing...');
+          loadData();
+        }
+      )
+      .subscribe();
+
     return () => { 
       isMounted = false; 
       clearInterval(timer);
+      supabase.removeChannel(channel);
     };
   }, []);
 
