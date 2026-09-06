@@ -309,27 +309,199 @@ export class DatabaseService {
   }
 
   /**
-   * Get customer's issued tickets
+   * Get customer's tickets (issued, winner, and pending) with robust participant resolution
    */
-  async getUserTickets(participantId: string) {
-    const { data, error } = await supabase
-      .from('lottery_tickets')
-      .select(`
-        ticket_number,
-        status,
-        issued_at,
-        lottery_events (
-          title,
-          ticket_price,
-          draw_at
-        )
-      `)
-      .eq('owner_participant_id', participantId)
-      .eq('status', 'ISSUED')
-      .order('issued_at', { ascending: false });
+  /**
+   * Get customer's tickets (issued, winner, and pending) with robust participant resolution
+   */
+  async getUserTickets(telegramIdOrParticipantId: number | string, username?: string) {
+    try {
+      let participantIds: string[] = [];
+      let telegramId: number | null = null;
 
-    if (error) return [];
-    return data || [];
+      if (typeof telegramIdOrParticipantId === 'number') {
+        telegramId = telegramIdOrParticipantId;
+      } else if (typeof telegramIdOrParticipantId === 'string' && !isNaN(Number(telegramIdOrParticipantId)) && Number(telegramIdOrParticipantId) > 10000) {
+        telegramId = Number(telegramIdOrParticipantId);
+      }
+
+      // 1. Get user details from users table if we have a telegram ID
+      let userPhones: string[] = [];
+      let dbUsername: string | null = username || null;
+
+      if (telegramId) {
+        const { data: user } = await supabase
+          .from('users')
+          .select('phone_number, telegram_username')
+          .eq('telegram_id', telegramId)
+          .maybeSingle();
+
+        if (user?.phone_number) {
+          const rawPhone = user.phone_number.trim();
+          userPhones.push(rawPhone);
+          // Generate common Ethiopian phone variations (+2519..., 09..., 2519..., 9...)
+          const digits = rawPhone.replace(/\D/g, '');
+          if (digits.startsWith('251') && digits.length === 12) {
+            userPhones.push('0' + digits.substring(3));
+            userPhones.push('+' + digits);
+            userPhones.push(digits);
+            userPhones.push(digits.substring(3));
+          } else if (digits.startsWith('09') && digits.length === 10) {
+            userPhones.push('+251' + digits.substring(1));
+            userPhones.push('251' + digits.substring(1));
+            userPhones.push(digits);
+            userPhones.push(digits.substring(1));
+          }
+        }
+        if (user?.telegram_username && !dbUsername) {
+          dbUsername = user.telegram_username;
+        }
+      }
+
+      // 2. Fetch all matching participant IDs
+      const orClauses: string[] = [];
+      if (telegramId) {
+        orClauses.push(`user_id.eq.${telegramId}`);
+      }
+      userPhones.forEach(ph => {
+        if (ph) orClauses.push(`phone_number.eq.${ph}`);
+      });
+      if (dbUsername) {
+        const cleanUser = dbUsername.replace('@', '');
+        orClauses.push(`telegram_username.ilike.${cleanUser}`);
+      }
+      if (typeof telegramIdOrParticipantId === 'string' && telegramIdOrParticipantId.length > 20) {
+        orClauses.push(`id.eq.${telegramIdOrParticipantId}`);
+      }
+
+      if (orClauses.length > 0) {
+        const { data: parts } = await supabase
+          .from('participants')
+          .select('id')
+          .or(orClauses.join(','));
+
+        participantIds = (parts || []).map((p: any) => p.id);
+      }
+
+      if (typeof telegramIdOrParticipantId === 'string' && telegramIdOrParticipantId.length > 20) {
+        if (!participantIds.includes(telegramIdOrParticipantId)) {
+          participantIds.push(telegramIdOrParticipantId);
+        }
+      }
+
+      if (participantIds.length === 0) return [];
+
+      const seenKeys = new Set<string>();
+      const results: any[] = [];
+
+      // 3. Query lottery_tickets where owner is in participantIds
+      const { data: ticketsData, error: ticketsErr } = await supabase
+        .from('lottery_tickets')
+        .select(`
+          id,
+          ticket_number,
+          status,
+          issued_at,
+          created_at,
+          lottery_events (
+            id,
+            title,
+            ticket_price,
+            draw_at
+          )
+        `)
+        .in('owner_participant_id', participantIds)
+        .in('status', ['ISSUED', 'WINNER'])
+        .order('issued_at', { ascending: false });
+
+      if (ticketsErr) {
+        console.warn('[DatabaseService] getUserTickets lottery_tickets query warning:', ticketsErr.message);
+      }
+
+      (ticketsData || []).forEach((t: any) => {
+        const key = `${t.lottery_events?.id}_${t.ticket_number}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          results.push({
+            ticket_number: t.ticket_number,
+            status: t.status,
+            issued_at: t.issued_at || t.created_at,
+            lottery_events: t.lottery_events
+          });
+        }
+      });
+
+      // 4. Also check payments table where status = 'VERIFIED'
+      const { data: verifiedPayments } = await supabase
+        .from('payments')
+        .select(`
+          ticket_number,
+          status,
+          created_at,
+          verified_at,
+          event_id,
+          lottery_events (
+            id,
+            title,
+            ticket_price,
+            draw_at
+          )
+        `)
+        .in('participant_id', participantIds)
+        .eq('status', 'VERIFIED')
+        .order('created_at', { ascending: false });
+
+      (verifiedPayments || []).forEach((p: any) => {
+        const key = `${p.event_id}_${p.ticket_number}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          results.push({
+            ticket_number: p.ticket_number,
+            status: 'ISSUED',
+            issued_at: p.verified_at || p.created_at,
+            lottery_events: p.lottery_events
+          });
+        }
+      });
+
+      // 5. Check completed reservations as well
+      const { data: completedReservations } = await supabase
+        .from('reservations')
+        .select(`
+          ticket_number,
+          status,
+          created_at,
+          completed_at,
+          event_id,
+          lottery_events (
+            id,
+            title,
+            ticket_price,
+            draw_at
+          )
+        `)
+        .in('participant_id', participantIds)
+        .eq('status', 'COMPLETED')
+        .order('created_at', { ascending: false });
+
+      (completedReservations || []).forEach((r: any) => {
+        const key = `${r.event_id}_${r.ticket_number}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          results.push({
+            ticket_number: r.ticket_number,
+            status: 'ISSUED',
+            issued_at: r.completed_at || r.created_at,
+            lottery_events: r.lottery_events
+          });
+        }
+      });
+
+      return results;
+    } catch (err) {
+      console.error('[DatabaseService] getUserTickets error:', err);
+      return [];
+    }
   }
 
   /**
