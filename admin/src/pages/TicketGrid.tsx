@@ -34,10 +34,17 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
 
   // 100 numbers per page
   const pageSize = 100;
-  const totalPages = currentEvent ? Math.ceil((currentEvent.total_tickets || 0) / pageSize) : 0;
+  
+  const startNum = currentEvent?.start_number || 1;
+  const endNum = currentEvent?.end_number || (currentEvent?.total_tickets ? startNum + currentEvent.total_tickets - 1 : startNum + 49);
+  const totalCount = Math.max(1, endNum - startNum + 1);
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const rangeStart = selectedRangeIndex * pageSize + 1;
-  const rangeEnd = currentEvent ? Math.min((selectedRangeIndex + 1) * pageSize, currentEvent.total_tickets || 0) : 0;
+  // Clamped page index (prevents empty grid when switching between events with different capacities)
+  const safePageIndex = Math.min(selectedRangeIndex, totalPages - 1);
+
+  const rangeStart = startNum + safePageIndex * pageSize;
+  const rangeEnd = Math.min(startNum + (safePageIndex + 1) * pageSize - 1, endNum);
 
   // Map known tickets by number for this event
   const ticketMap = useMemo(() => {
@@ -50,7 +57,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
 
   // Numbers in current 100 block
   const numbersInRange = useMemo(() => {
-    const arr = [];
+    const arr: number[] = [];
     for (let i = rangeStart; i <= rangeEnd; i++) {
       arr.push(i);
     }
@@ -61,7 +68,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
   const totalSold = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'ISSUED').length;
   const totalReserved = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'RESERVED').length;
   const totalReview = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'MANUAL_REVIEW').length;
-  const totalAvailable = Math.max(0, (currentEvent?.total_tickets || 0) - (totalSold + totalReserved + totalReview));
+  const totalAvailable = Math.max(0, totalCount - (totalSold + totalReserved + totalReview));
 
   const getTicketDesign = (status: TicketStatus) => {
     switch (status) {
@@ -260,14 +267,14 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
               #{rangeStart} – #{rangeEnd}
             </span>
             <span className="text-xs text-slate-400 font-medium">
-              ({selectedRangeIndex + 1} / {totalPages})
+              ({safePageIndex + 1} / {totalPages})
             </span>
           </div>
 
           {/* Pagination Arrows */}
           <div className="flex items-center gap-1.5">
             <button
-              disabled={selectedRangeIndex === 0}
+              disabled={safePageIndex === 0}
               onClick={() => setSelectedRangeIndex(prev => Math.max(0, prev - 1))}
               className="p-2 rounded-xl border border-slate-200/80 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none text-slate-600 shadow-sm cursor-pointer"
             >
@@ -277,9 +284,9 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
             {/* Direct 100s Quick Scroller */}
             <div className="flex items-center gap-1 overflow-x-auto max-w-xs sm:max-w-md scrollbar-none px-1">
               {Array.from({ length: totalPages }).map((_, idx) => {
-                const s = idx * pageSize + 1;
-                const e = Math.min((idx + 1) * pageSize, currentEvent.total_tickets);
-                const isSelected = selectedRangeIndex === idx;
+                const s = startNum + idx * pageSize;
+                const e = Math.min(startNum + (idx + 1) * pageSize - 1, endNum);
+                const isSelected = safePageIndex === idx;
 
                 return (
                   <button
@@ -298,7 +305,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
             </div>
 
             <button
-              disabled={selectedRangeIndex >= totalPages - 1}
+              disabled={safePageIndex >= totalPages - 1}
               onClick={() => setSelectedRangeIndex(prev => Math.min(totalPages - 1, prev + 1))}
               className="p-2 rounded-xl border border-slate-200/80 hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none text-slate-600 shadow-sm cursor-pointer"
             >
