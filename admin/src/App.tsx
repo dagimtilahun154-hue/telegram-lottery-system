@@ -17,34 +17,23 @@ import { fetchLiveEvents, fetchLivePurchases, supabase } from './lib/supabase';
 import { LotteryEvent, PurchaseRecord } from './types';
 import { I18nProvider } from './lib/i18n';
 
+// Purge any legacy stale localStorage keys on initial module load
+try {
+  localStorage.removeItem('lottery_admin_events');
+  localStorage.removeItem('lottery_admin_purchases');
+  localStorage.removeItem('lottery_events_data');
+  localStorage.removeItem('lottery_admin_broadcasts');
+} catch (_) {}
+
 function AdminContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => isAuthenticated());
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedEventId, setSelectedEventId] = useState('ALL');
 
-  // Real State: Live Supabase data with 10s auto-refresh
-  const [events, setEvents] = useState<LotteryEvent[]>(() => {
-    try {
-      const saved = localStorage.getItem('lottery_admin_events');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const filtered = parsed.filter((e: any) => !String(e.id).startsWith('evt-'));
-        return filtered;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('lottery_admin_purchases');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // Real State: 100% Live Supabase data (Zero LocalStorage Fallback)
+  const [events, setEvents] = useState<LotteryEvent[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [activeReceiptPurchase, setActiveReceiptPurchase] = useState<any>(null);
 
@@ -59,17 +48,17 @@ function AdminContent() {
         ]);
         if (isMounted) {
           setEvents(liveEvents || []);
-          localStorage.setItem('lottery_admin_events', JSON.stringify(liveEvents || []));
           setPurchases(livePurchases || []);
-          localStorage.setItem('lottery_admin_purchases', JSON.stringify(livePurchases || []));
+          setIsLoading(false);
         }
       } catch (err) {
         console.error('Failed to sync live data:', err);
+        if (isMounted) setIsLoading(false);
       }
     }
 
     loadData();
-    const timer = setInterval(loadData, 8000);
+    const timer = setInterval(loadData, 6000);
 
     // Supabase Realtime Subscription for Instant Bot-to-Admin Sync
     const channel = supabase
@@ -129,9 +118,8 @@ function AdminContent() {
   const pendingReviewCount = purchases.filter(p => p.status === 'MANUAL_REVIEW').length;
 
   const handleAddEvent = async (newEvent: LotteryEvent) => {
-    const updated = [newEvent, ...events];
-    setEvents(updated);
-    localStorage.setItem('lottery_admin_events', JSON.stringify(updated));
+    // Optimistic UI update
+    setEvents(prev => [newEvent, ...prev]);
 
     // Persist to Supabase
     try {
@@ -156,6 +144,9 @@ function AdminContent() {
 
       if (evtError) {
         console.error('[Supabase] Failed to insert event:', evtError.message);
+        alert(`Failed to save event to database: ${evtError.message}`);
+        const refreshed = await fetchLiveEvents();
+        setEvents(refreshed || []);
         return;
       }
 
@@ -172,29 +163,24 @@ function AdminContent() {
 
       // Refresh live events from Supabase to sync authoritative state
       const refreshedEvents = await fetchLiveEvents();
-      if (refreshedEvents && refreshedEvents.length > 0) {
-        setEvents(refreshedEvents);
-        localStorage.setItem('lottery_admin_events', JSON.stringify(refreshedEvents));
-      }
+      setEvents(refreshedEvents || []);
     } catch (err: any) {
       console.error('[Supabase] Exception in handleAddEvent:', err.message);
     }
   };
 
   const handleUpdateEventStatus = (eventId: string, newStatus: any) => {
-    const updated = events.map(e => e.id === eventId ? { ...e, status: newStatus } : e);
-    setEvents(updated);
-    localStorage.setItem('lottery_admin_events', JSON.stringify(updated));
-    supabase.from('lottery_events').update({ status: newStatus }).eq('id', eventId).then();
+    setEvents(prev => prev.map(e => e.id === eventId ? { ...e, status: newStatus } : e));
+    supabase.from('lottery_events').update({ status: newStatus }).eq('id', eventId).then(() => {
+      fetchLiveEvents().then(evts => setEvents(evts || []));
+    });
   };
 
   const handleAddManualSale = async (newSale: any) => {
     // 1. Optimistic UI update
-    const updatedPurchases = [newSale, ...purchases];
-    setPurchases(updatedPurchases);
-    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+    setPurchases(prev => [newSale, ...prev]);
 
-    const updatedEvents = events.map(e => {
+    setEvents(prev => prev.map(e => {
       if (e.id === newSale.eventId) {
         const sold = (e.sold_tickets || 0) + 1;
         return {
@@ -204,9 +190,7 @@ function AdminContent() {
         };
       }
       return e;
-    });
-    setEvents(updatedEvents);
-    localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
+    }));
 
     // 2. Persist to Supabase
     try {
@@ -303,16 +287,14 @@ function AdminContent() {
     if (!approved) return;
 
     // 1. Optimistic UI update
-    const updatedPurchases = purchases.map(p => {
+    setPurchases(prev => prev.map(p => {
       if (p.id === id) {
         return { ...p, status: 'ISSUED' as const, rejectionReason: null };
       }
       return p;
-    });
-    setPurchases(updatedPurchases);
-    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+    }));
 
-    const updatedEvents = events.map(e => {
+    setEvents(prev => prev.map(e => {
       if (e.id === approved.eventId) {
         const sold = (e.sold_tickets || 0) + 1;
         return {
@@ -322,9 +304,7 @@ function AdminContent() {
         };
       }
       return e;
-    });
-    setEvents(updatedEvents);
-    localStorage.setItem('lottery_admin_events', JSON.stringify(updatedEvents));
+    }));
     setActiveReceiptPurchase(null);
 
     // 2. Comprehensive Database & Bot Sync
@@ -391,14 +371,12 @@ function AdminContent() {
     if (!rejected) return;
 
     // 1. Optimistic UI update
-    const updatedPurchases = purchases.map(p => {
+    setPurchases(prev => prev.map(p => {
       if (p.id === id) {
         return { ...p, status: 'REJECTED' as const, rejectionReason: reason };
       }
       return p;
-    });
-    setPurchases(updatedPurchases);
-    localStorage.setItem('lottery_admin_purchases', JSON.stringify(updatedPurchases));
+    }));
     setActiveReceiptPurchase(null);
 
     // 2. Comprehensive Database & Bot Sync

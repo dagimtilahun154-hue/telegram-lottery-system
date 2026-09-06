@@ -36,15 +36,17 @@ export const Events: React.FC<EventsProps> = ({
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
   const [salesDays, setSalesDays] = useState('20');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !ticketPrice || !receiverAccount || !receiverName) return;
 
+    setIsSubmitting(true);
     const newEvt: LotteryEvent = {
       id: crypto.randomUUID(),
       title,
-      slug: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      slug: `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString().slice(-4)}`,
       description: description || `Win a ${title}! Total tickets: ${totalTickets}. Verified via ${paymentProvider}.`,
       image_url: imageUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800',
       ticket_price: Number(ticketPrice),
@@ -64,13 +66,17 @@ export const Events: React.FC<EventsProps> = ({
       revenue: 0
     };
 
-    onAddEvent(newEvt);
-    setShowCreateModal(false);
-    setTitle('');
-    setReceiverAccount('');
-    setReceiverName('');
-    setImageUrl('');
-    setDescription('');
+    try {
+      await onAddEvent(newEvt);
+      setShowCreateModal(false);
+      setTitle('');
+      setReceiverAccount('');
+      setReceiverName('');
+      setImageUrl('');
+      setDescription('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -354,6 +360,7 @@ export const Events: React.FC<EventsProps> = ({
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setShowCreateModal(false)}
                   className="btn-secondary py-2"
                 >
@@ -361,9 +368,10 @@ export const Events: React.FC<EventsProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   className="btn-primary py-2 px-5"
                 >
-                  {t.createEvent}
+                  {isSubmitting ? 'Creating & Generating Tickets...' : t.createEvent}
                 </button>
               </div>
             </form>
