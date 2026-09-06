@@ -161,6 +161,29 @@ function AdminContent() {
         console.warn('[Supabase] generate_lottery_tickets notice:', ticketError.message);
       }
 
+      // Auto-broadcast new event to Telegram Channel and all subscribers
+      try {
+        const defaultChannel = localStorage.getItem('lottery_channel_handle') || '@RichoLottery';
+        const autoPost = localStorage.getItem('lottery_autopost_events') !== 'false';
+
+        if (autoPost) {
+          await supabase.from('broadcasts').insert({
+            event_id: newEvent.id,
+            title: `🎉 አዲስ የሎተሪ ዕጣ ወጥቷል! (${newEvent.title})`,
+            message_text: `<!--destination:ALL--><!--target_channel:${defaultChannel}-->🎉 *አዲስ የሎተሪ ውድድር ይፋ ሆኗል!*\n\n🎟️ *${newEvent.title}*\n💰 የቲኬት ዋጋ፡ *${newEvent.ticket_price} ETB*\n🔢 ጠቅላላ ቲኬቶች፡ *${newEvent.total_tickets}*\n💳 የክፍያ ዘዴ፡ *${newEvent.payment_provider}*\n\nዕድልዎን አሁኑኑ ይሞክሩ! ቲኬት ለመቁረጥ ከታች ያለውን አዝራር ይጫኑ።`,
+            image_url: newEvent.image_url || null,
+            button_text: `🎟️ Cut Ticket Now (${newEvent.ticket_price} ETB)`,
+            button_url: `https://t.me/meklawbot?start=event_${newEvent.id}`,
+            target_language: 'ALL',
+            status: 'SENDING',
+            total_recipients: 1
+          });
+          console.log('[Supabase] Auto-broadcast queued for new event:', newEvent.title);
+        }
+      } catch (bcErr) {
+        console.warn('[Supabase] Auto-broadcast queue warning:', bcErr);
+      }
+
       // Refresh live events from Supabase to sync authoritative state
       const refreshedEvents = await fetchLiveEvents();
       setEvents(refreshedEvents || []);

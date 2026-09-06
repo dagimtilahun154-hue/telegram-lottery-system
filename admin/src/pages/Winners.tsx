@@ -69,15 +69,45 @@ export const Winners: React.FC<WinnersProps> = ({ events, purchases }) => {
         winner_message: `🎉 Official Winner: Ticket #${winner.ticketNumber} (${winner.customerName})`
       }).eq('id', winner.eventId);
 
-      // 4. Queue public broadcast announcement for Telegram Bot subscribers & channel
+      // 4. Resolve Telegram User ID if not in memory
+      let targetTelegramUserId = winner.telegramUserId;
+      if (!targetTelegramUserId && winner.participantId) {
+        const { data: partData } = await supabase
+          .from('participants')
+          .select('user_id')
+          .eq('id', winner.participantId)
+          .maybeSingle();
+        if (partData?.user_id) {
+          targetTelegramUserId = partData.user_id;
+        }
+      }
+
+      // 5. DIRECT 1-to-1 NOTIFICATION to the Winning Buyer
+      if (targetTelegramUserId) {
+        await supabase.from('broadcasts').insert({
+          event_id: winner.eventId,
+          title: `🏆 Congratulations! You Won the Grand Lottery! 🎉`,
+          message_text: `<!--target_user:${targetTelegramUserId}--><!--destination:USERS-->🎉 *እንኳን ደስ አለዎት ${winner.customerName}!* 🏆\n\nለ *${winner.eventTitle}* የቆረጡት ቲኬት ቁጥር *#${winner.ticketNumber}* አሸናፊ ሆኗል!\n\nሽልማትዎን ለመረከብ እባክዎ የአድሚን ድጋፍ ሰጪን ያነጋግሩ። እንኳን ደስ አለዎት! 🎊`,
+          target_language: 'ALL',
+          status: 'SENDING',
+          total_recipients: 1
+        });
+        console.log(`[Supabase] Direct winner DM queued for user ${targetTelegramUserId}`);
+      }
+
+      // 6. PUBLIC ANNOUNCEMENT to Telegram Channel and All Subscribers
+      const defaultChannel = localStorage.getItem('lottery_channel_handle') || '@RichoLottery';
       await supabase.from('broadcasts').insert({
         event_id: winner.eventId,
         title: `🏆 OFFICIAL WINNER ANNOUNCED!`,
-        message_text: `🎉 *እንኳን ደስ አለዎት! የአሸናፊው ቲኬት ይፋ ሆነ!*\n\nለ *${winner.eventTitle}* አሸናፊ የሆነው ቲኬት ቁጥር *#${winner.ticketNumber}* (${winner.customerName}) ነው!\n\nዕድለኛውን አሸናፊ እንኳን ደስ አለዎት እያልን፤ በቅርቡ የሽልማት አሰጣጡን የምናሳውቅ ይሆናል።`,
+        message_text: `<!--destination:ALL--><!--target_channel:${defaultChannel}-->🎉 *እንኳን ደስ አለዎት! የአሸናፊው ቲኬት ይፋ ሆነ!*\n\nለ *${winner.eventTitle}* አሸናፊ የሆነው ቲኬት ቁጥር *#${winner.ticketNumber}* (${winner.customerName}) ነው!\n\nዕድለኛውን አሸናፊ እንኳን ደስ አለዎት እያልን፤ በቅርቡ የሽልማት አሰጣጡን የምናሳውቅ ይሆናል።`,
+        button_text: '🏆 View Winners & Active Lotteries',
+        button_url: 'https://t.me/meklawbot',
         target_language: 'ALL',
         status: 'SENDING',
         total_recipients: 1
       });
+      console.log(`[Supabase] Public winner broadcast queued for channel ${defaultChannel}`);
     } catch (err) {
       console.error('[Supabase] Failed to sync confirmed winner:', err);
     }
