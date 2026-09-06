@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { LotteryEvent, PurchaseRecord } from '../types';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bottnxyxyvecvdladcoe.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvdHRueHl4eXZlY3ZkbGFkY29lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODU1MDE4NiwiZXhwIjoyMTA0MTI2MTg2fQ.SDwCwscGwBRYXZVz7f9iKmnW7i9z-ruWySYJZRhHJaU';
+const ACTIVE_SUPABASE_URL = 'https://bottnxyxyvecvdladcoe.supabase.co';
+const ACTIVE_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvdHRueHl4eXZlY3ZkbGFkY29lIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4ODU1MDE4NiwiZXhwIjoyMTA0MTI2MTg2fQ.SDwCwscGwBRYXZVz7f9iKmnW7i9z-ruWySYJZRhHJaU';
+
+const rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+// Reject any invalid or dead legacy Supabase project domain (e.g. kbtrohguymjxnzizkimq)
+const supabaseUrl = (rawUrl && !rawUrl.includes('kbtrohguymjxnzizkimq') && rawUrl.startsWith('https://')) ? rawUrl : ACTIVE_SUPABASE_URL;
+const supabaseAnonKey = (rawKey && rawKey.length > 80 && !rawUrl.includes('kbtrohguymjxnzizkimq')) ? rawKey : ACTIVE_SUPABASE_KEY;
 
 export const isSupabaseConfigured = true;
 
