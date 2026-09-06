@@ -484,6 +484,7 @@ function AdminContent() {
             <Dashboard 
               events={events}
               purchases={purchases}
+              selectedEventId={selectedEventId}
               onSelectEvent={setSelectedEventId}
               onNavigate={setActiveTab}
               onOpenReceipt={(p) => setActiveReceiptPurchase(p)}

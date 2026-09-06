@@ -17,6 +17,7 @@ import { useI18n } from '../lib/i18n';
 interface DashboardProps {
   events: LotteryEvent[];
   purchases: any[];
+  selectedEventId?: string;
   onSelectEvent: (eventId: string) => void;
   onNavigate: (tab: string) => void;
   onOpenReceipt: (purchase: any) => void;
@@ -25,18 +26,23 @@ interface DashboardProps {
 export const Dashboard: React.FC<DashboardProps> = ({
   events,
   purchases,
+  selectedEventId = 'ALL',
   onSelectEvent,
   onNavigate,
   onOpenReceipt
 }) => {
   const { t } = useI18n();
 
-  const totalRevenue = events.reduce((sum, e) => sum + (e.revenue || 0), 0);
-  const totalTicketsSold = events.reduce((sum, e) => sum + (e.sold_tickets || 0), 0);
-  const totalTicketsCapacity = events.reduce((sum, e) => sum + (e.total_tickets || 0), 0);
-  const activeReservationsCount = purchases.filter(p => p.status === 'RESERVED' || p.status === 'PAYMENT_SUBMITTED').length;
-  const manualReviewCount = purchases.filter(p => p.status === 'MANUAL_REVIEW').length;
-  const pendingVerificationsCount = purchases.filter(p => p.status === 'PAYMENT_SUBMITTED' || p.status === 'VERIFYING').length;
+  const isSpecificEvent = selectedEventId && selectedEventId !== 'ALL';
+  const targetEvents = isSpecificEvent ? events.filter(e => e.id === selectedEventId) : events;
+  const targetPurchases = isSpecificEvent ? purchases.filter(p => p.eventId === selectedEventId) : purchases;
+
+  const totalRevenue = targetEvents.reduce((sum, e) => sum + (e.revenue || 0), 0);
+  const totalTicketsSold = targetEvents.reduce((sum, e) => sum + (e.sold_tickets || 0), 0);
+  const totalTicketsCapacity = targetEvents.reduce((sum, e) => sum + (e.total_tickets || 0), 0);
+  const activeReservationsCount = targetPurchases.filter(p => p.status === 'RESERVED' || p.status === 'ACTIVE').length;
+  const manualReviewCount = targetPurchases.filter(p => p.status === 'MANUAL_REVIEW').length;
+  const pendingVerificationsCount = targetPurchases.filter(p => p.status === 'PAYMENT_SUBMITTED' || p.status === 'VERIFYING' || p.status === 'PENDING').length;
 
   return (
     <div className="space-y-6">
