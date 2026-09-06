@@ -192,9 +192,28 @@ export async function startBot() {
     console.log('ℹ️ Telegram Bot compiled and ready. Provide BOT_TOKEN to launch polling.');
   }
 
+  // Keep-alive loop: Automatically ping self every 4 minutes so Render free tier never sleeps
+  let keepAliveInterval: NodeJS.Timeout | null = null;
+  const externalUrl = CONFIG.RENDER_EXTERNAL_URL;
+  if (externalUrl && externalUrl.startsWith('http')) {
+    console.log(`💓 Auto Keep-Alive enabled for: ${externalUrl}/health (every 4 min)`);
+    keepAliveInterval = setInterval(async () => {
+      try {
+        const pingUrl = `${externalUrl.replace(/\/+$/, '')}/health`;
+        const res = await fetch(pingUrl, { method: 'GET' });
+        if (res.ok) {
+          console.log(`💓 [Keep-Alive] Pinged ${pingUrl} - Status 200 OK (Uptime: ${Math.floor(process.uptime())}s)`);
+        }
+      } catch (pingErr: any) {
+        console.warn('[Keep-Alive] Ping notice:', pingErr.message);
+      }
+    }, 4 * 60 * 1000);
+  }
+
   // Graceful stop
   const shutdown = () => {
     console.log('🛑 Shutting down cleanly...');
+    if (keepAliveInterval) clearInterval(keepAliveInterval);
     server.close();
     expirationWorker.stop();
     broadcastWorker.stop();

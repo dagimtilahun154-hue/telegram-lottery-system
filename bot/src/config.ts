@@ -9,7 +9,8 @@ export const CONFIG = {
   VERITAS_API_KEYS: process.env.VERITAS_API_KEYS || '',
   VERITAS_API_URL: process.env.VERITAS_API_URL || 'https://verifyapi.leulzenebe.pro',
   PORT: parseInt(process.env.PORT || '7860', 10),
-  NODE_ENV: process.env.NODE_ENV || 'production'
+  NODE_ENV: process.env.NODE_ENV || 'production',
+  RENDER_EXTERNAL_URL: process.env.RENDER_EXTERNAL_URL || 'https://richo-ekub-bot.onrender.com'
 };
 
 
