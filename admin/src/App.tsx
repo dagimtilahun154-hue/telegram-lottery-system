@@ -16,6 +16,7 @@ import { isAuthenticated, logout, getSessionUser } from './lib/auth';
 import { fetchLiveEvents, fetchLivePurchases, supabase } from './lib/supabase';
 import { LotteryEvent, PurchaseRecord } from './types';
 import { I18nProvider } from './lib/i18n';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Purge any legacy stale localStorage keys on initial module load
 try {
@@ -480,80 +481,82 @@ function AdminContent() {
 
         {/* Dynamic Page View */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
-          {activeTab === 'dashboard' && (
-            <Dashboard 
-              events={events}
-              purchases={purchases}
-              selectedEventId={selectedEventId}
-              onSelectEvent={setSelectedEventId}
-              onNavigate={setActiveTab}
-              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
-            />
-          )}
+          <ErrorBoundary>
+            {activeTab === 'dashboard' && (
+              <Dashboard 
+                events={events}
+                purchases={purchases}
+                selectedEventId={selectedEventId}
+                onSelectEvent={setSelectedEventId}
+                onNavigate={setActiveTab}
+                onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+              />
+            )}
 
-          {activeTab === 'events' && (
-            <Events 
-              events={events}
-              onAddEvent={handleAddEvent}
-              onUpdateEventStatus={handleUpdateEventStatus}
-              onSelectEvent={(id) => {
-                setSelectedEventId(id);
-                setActiveTab('ticket-grid');
-              }}
-            />
-          )}
+            {activeTab === 'events' && (
+              <Events 
+                events={events}
+                onAddEvent={handleAddEvent}
+                onUpdateEventStatus={handleUpdateEventStatus}
+                onSelectEvent={(id) => {
+                  setSelectedEventId(id);
+                  setActiveTab('ticket-grid');
+                }}
+              />
+            )}
 
-          {activeTab === 'purchases' && (
-            <Purchases 
-              purchases={purchases}
-              events={events}
-              selectedEventId={selectedEventId}
-              onSelectEventId={setSelectedEventId}
-              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
-            />
-          )}
+            {activeTab === 'purchases' && (
+              <Purchases 
+                purchases={purchases}
+                events={events}
+                selectedEventId={selectedEventId}
+                onSelectEventId={setSelectedEventId}
+                onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+              />
+            )}
 
-          {activeTab === 'ticket-grid' && (
-            <TicketGrid 
-              events={events}
-              selectedEventId={selectedEventId}
-              onSelectEventId={setSelectedEventId}
-              purchases={purchases}
-              onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
-            />
-          )}
+            {activeTab === 'ticket-grid' && (
+              <TicketGrid 
+                events={events}
+                selectedEventId={selectedEventId}
+                onSelectEventId={setSelectedEventId}
+                purchases={purchases}
+                onOpenReceipt={(p) => setActiveReceiptPurchase(p)}
+              />
+            )}
 
-          {activeTab === 'broadcast' && (
-            <BroadcastPage 
-              events={events}
-            />
-          )}
+            {activeTab === 'broadcast' && (
+              <BroadcastPage 
+                events={events}
+              />
+            )}
 
-          {activeTab === 'manual-sales' && (
-            <ManualSales 
-              events={events}
-              purchases={purchases}
-              onAddManualSale={handleAddManualSale}
-            />
-          )}
+            {activeTab === 'manual-sales' && (
+              <ManualSales 
+                events={events}
+                purchases={purchases}
+                onAddManualSale={handleAddManualSale}
+              />
+            )}
 
-          {activeTab === 'winners' && (
-            <Winners 
-              events={events}
-              purchases={purchases}
-            />
-          )}
+            {activeTab === 'winners' && (
+              <Winners 
+                events={events}
+                purchases={purchases}
+              />
+            )}
 
-          {activeTab === 'reports' && (
-            <Reports 
-              events={events}
-              purchases={purchases}
-            />
-          )}
+            {activeTab === 'reports' && (
+              <Reports 
+                events={events}
+                purchases={purchases}
+              />
+            )}
 
-          {activeTab === 'settings' && (
-            <Settings />
-          )}
+            {activeTab === 'settings' && (
+              <Settings />
+            )}
+          </ErrorBoundary>
         </main>
       </div>
 

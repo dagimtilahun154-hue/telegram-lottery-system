@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   Layers, 
   Ticket as TicketIcon,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { LotteryEvent, TicketStatus } from '../types';
 import { useI18n } from '../lib/i18n';
@@ -19,29 +20,45 @@ interface TicketGridProps {
 }
 
 export const TicketGrid: React.FC<TicketGridProps> = ({
-  events,
+  events = [],
   selectedEventId,
   onSelectEventId,
-  purchases,
+  purchases = [],
   onOpenReceipt
 }) => {
   const { t } = useI18n();
-  const currentEvent = events.find(e => e.id === selectedEventId) || events[0];
+
+  // Pick the active event safely
+  const currentEvent = useMemo(() => {
+    if (!events || events.length === 0) return null;
+    if (selectedEventId && selectedEventId !== 'ALL') {
+      const found = events.find(e => e.id === selectedEventId);
+      if (found) return found;
+    }
+    return events[0];
+  }, [events, selectedEventId]);
+
   const [selectedRangeIndex, setSelectedRangeIndex] = useState(0);
   const [searchNumber, setSearchNumber] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
   const [inspectedTicket, setInspectedTicket] = useState<any>(null);
 
+  // Reset range pagination when event changes
+  useEffect(() => {
+    setSelectedRangeIndex(0);
+    setSearchNumber('');
+  }, [currentEvent?.id]);
+
   // 100 numbers per page
   const pageSize = 100;
   
-  const startNum = currentEvent?.start_number || 1;
-  const endNum = currentEvent?.end_number || (currentEvent?.total_tickets ? startNum + currentEvent.total_tickets - 1 : startNum + 49);
-  const totalCount = Math.max(1, endNum - startNum + 1);
+  const startNum = currentEvent?.start_number ?? 1;
+  const endNum = currentEvent?.end_number ?? (currentEvent?.total_tickets ? startNum + currentEvent.total_tickets - 1 : startNum + 49);
+  const totalCount = Math.max(1, (endNum - startNum) + 1);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // Clamped page index (prevents empty grid when switching between events with different capacities)
-  const safePageIndex = Math.min(selectedRangeIndex, totalPages - 1);
+  const safePageIndex = Math.max(0, Math.min(selectedRangeIndex, totalPages - 1));
 
   const rangeStart = startNum + safePageIndex * pageSize;
   const rangeEnd = Math.min(startNum + (safePageIndex + 1) * pageSize - 1, endNum);
@@ -49,25 +66,45 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
   // Map known tickets by number for this event
   const ticketMap = useMemo(() => {
     const map = new Map<number, any>();
-    purchases.filter(p => p.eventId === currentEvent?.id).forEach(p => {
-      map.set(p.ticketNumber, p);
-    });
+    if (!purchases || !currentEvent) return map;
+
+    purchases
+      .filter(p => p && p.eventId === currentEvent.id)
+      .forEach(p => {
+        if (p.ticketNumber !== undefined && p.ticketNumber !== null) {
+          map.set(Number(p.ticketNumber), p);
+        }
+      });
     return map;
   }, [purchases, currentEvent?.id]);
 
   // Numbers in current 100 block
   const numbersInRange = useMemo(() => {
     const arr: number[] = [];
-    for (let i = rangeStart; i <= rangeEnd; i++) {
-      arr.push(i);
+    if (rangeStart <= rangeEnd) {
+      for (let i = rangeStart; i <= rangeEnd; i++) {
+        arr.push(i);
+      }
     }
     return arr;
   }, [rangeStart, rangeEnd]);
 
   // Counts for summary pills
-  const totalSold = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'ISSUED').length;
-  const totalReserved = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'RESERVED').length;
-  const totalReview = purchases.filter(p => p.eventId === currentEvent?.id && p.status === 'MANUAL_REVIEW').length;
+  const totalSold = useMemo(() => {
+    if (!purchases || !currentEvent) return 0;
+    return purchases.filter(p => p && p.eventId === currentEvent.id && p.status === 'ISSUED').length;
+  }, [purchases, currentEvent?.id]);
+
+  const totalReserved = useMemo(() => {
+    if (!purchases || !currentEvent) return 0;
+    return purchases.filter(p => p && p.eventId === currentEvent.id && (p.status === 'RESERVED' || p.status === 'PAYMENT_SUBMITTED')).length;
+  }, [purchases, currentEvent?.id]);
+
+  const totalReview = useMemo(() => {
+    if (!purchases || !currentEvent) return 0;
+    return purchases.filter(p => p && p.eventId === currentEvent.id && (p.status === 'MANUAL_REVIEW' || p.status === 'VERIFYING')).length;
+  }, [purchases, currentEvent?.id]);
+
   const totalAvailable = Math.max(0, totalCount - (totalSold + totalReserved + totalReview));
 
   const getTicketDesign = (status: TicketStatus) => {
@@ -76,21 +113,21 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
         return {
           container: 'bg-[#0a1727] text-white border-transparent shadow-sm hover:shadow-glow-blue',
           dot: 'bg-emerald-400',
-          badgeText: t.issued,
+          badgeText: t?.issued || 'Issued',
           badgeBg: 'bg-emerald-400/20 text-emerald-300'
         };
       case 'RESERVED':
         return {
           container: 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black ring-2 ring-amber-400/40',
           dot: 'bg-slate-950',
-          badgeText: t.reserved,
+          badgeText: t?.reserved || 'Reserved',
           badgeBg: 'bg-slate-950/80 text-amber-300'
         };
       case 'MANUAL_REVIEW':
         return {
           container: 'bg-rose-600 text-white border-rose-500 shadow-sm ring-2 ring-rose-400/40',
           dot: 'bg-white',
-          badgeText: t.manualReview,
+          badgeText: t?.manualReview || 'Review',
           badgeBg: 'bg-white/20 text-white'
         };
       case 'PAYMENT_SUBMITTED':
@@ -98,15 +135,15 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
         return {
           container: 'bg-blue-600 text-white border-blue-500 shadow-sm',
           dot: 'bg-white',
-          badgeText: t.verifying,
+          badgeText: t?.verifying || 'Verifying',
           badgeBg: 'bg-white/20 text-white'
         };
       case 'AVAILABLE':
       default:
         return {
-          container: 'bg-white/95 text-slate-700 border-slate-200/80 hover:border-blue-500 hover:text-blue-700 hover:bg-blue-50/40 shadow-2xs',
+          container: 'bg-white/95 text-slate-700 border-slate-200/80 hover:border-blue-500 hover:text-blue-700 hover:bg-blue-50/40 shadow-sm',
           dot: 'bg-slate-300',
-          badgeText: t.available,
+          badgeText: t?.available || 'Available',
           badgeBg: 'bg-slate-100 text-slate-500'
         };
     }
@@ -115,11 +152,10 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseInt(searchNumber, 10);
-    if (isNaN(num) || num < 1 || num > (currentEvent?.total_tickets || 0)) return;
+    if (isNaN(num) || num < startNum || num > endNum) return;
 
-    const targetPage = Math.floor((num - 1) / pageSize);
+    const targetPage = Math.floor((num - startNum) / pageSize);
     setSelectedRangeIndex(targetPage);
-
   };
 
   if (!currentEvent) {
@@ -128,9 +164,9 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
         <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto text-xl font-bold">
           🎟️
         </div>
-        <h3 className="text-base font-black text-slate-900">No Lottery Events Available</h3>
+        <h3 className="text-base font-black text-slate-900">No Lottery Events Found</h3>
         <p className="text-xs text-slate-500">
-          Create a lottery event first to browse and manage ticket number reservations.
+          Create or sync a lottery event first to browse and inspect ticket number grids.
         </p>
       </div>
     );
@@ -142,10 +178,10 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900">
-            {t.grid}
+            {t?.grid || 'Ticket Grid'}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            <strong className="text-slate-900 font-bold">{currentEvent?.title}</strong> • {currentEvent?.ticket_price} ETB
+            <strong className="text-slate-900 font-bold">{currentEvent.title}</strong> • {currentEvent.ticket_price} ETB
           </p>
         </div>
 
@@ -154,7 +190,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
           <div className="flex items-center gap-2 bg-white/90 border border-slate-200/80 rounded-xl px-3 py-1.5 shadow-sm">
             <Layers className="w-3.5 h-3.5 text-blue-600" />
             <select
-              value={selectedEventId === 'ALL' ? currentEvent?.id : selectedEventId}
+              value={selectedEventId === 'ALL' ? currentEvent.id : selectedEventId}
               onChange={(e) => {
                 onSelectEventId(e.target.value);
                 setSelectedRangeIndex(0);
@@ -195,7 +231,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-            <span>{t.available}</span>
+            <span>{t?.available || 'Available'}</span>
             <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
           </div>
           <div className="text-xl font-black text-slate-900 mt-1">
@@ -213,7 +249,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-amber-700">
-            <span>{t.reserved} (15m)</span>
+            <span>{t?.reserved || 'Reserved'} (15m)</span>
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
           </div>
           <div className="text-xl font-black text-amber-600 mt-1">
@@ -231,7 +267,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-            <span>{t.issued}</span>
+            <span>{t?.issued || 'Issued'}</span>
             <span className="w-2.5 h-2.5 rounded-full bg-[#0a1727]" />
           </div>
           <div className="text-xl font-black text-[#0a1727] mt-1">
@@ -249,7 +285,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
           }`}
         >
           <div className="flex items-center justify-between text-xs font-bold text-rose-600">
-            <span>{t.manualReview}</span>
+            <span>{t?.manualReview || 'Review'}</span>
             <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
           </div>
           <div className="text-xl font-black text-rose-600 mt-1">
@@ -335,8 +371,8 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
                       setInspectedTicket({
                         ticketNumber: num,
                         status: 'AVAILABLE' as const,
-                        eventTitle: currentEvent?.title,
-                        amount: currentEvent?.ticket_price
+                        eventTitle: currentEvent.title,
+                        amount: currentEvent.ticket_price
                       });
                     }
                   }}
@@ -370,7 +406,7 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <TicketIcon className="w-4 h-4 text-blue-600" />
-                <h3 className="text-sm font-bold text-slate-900">{t.ticket} #{inspectedTicket.ticketNumber}</h3>
+                <h3 className="text-sm font-bold text-slate-900">{t?.ticket || 'Ticket'} #{inspectedTicket.ticketNumber}</h3>
               </div>
               <button
                 onClick={() => setInspectedTicket(null)}
@@ -382,26 +418,26 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
 
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-500">{t.events}:</span>
+                <span className="text-slate-500">{t?.events || 'Event'}:</span>
                 <span className="font-semibold text-slate-900">{inspectedTicket.eventTitle}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-500">{t.amount}:</span>
+                <span className="text-slate-500">{t?.amount || 'Price'}:</span>
                 <span className="font-bold text-slate-900">{inspectedTicket.amount} ETB</span>
               </div>
               <div className="flex justify-between py-1 border-b border-slate-50">
-                <span className="text-slate-500">{t.status}:</span>
+                <span className="text-slate-500">{t?.status || 'Status'}:</span>
                 <span className="font-bold uppercase text-blue-700">{inspectedTicket.status}</span>
               </div>
 
               {inspectedTicket.customerName && (
                 <>
                   <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500">{t.customer}:</span>
+                    <span className="text-slate-500">{t?.customer || 'Customer'}:</span>
                     <span className="font-semibold text-slate-900">{inspectedTicket.customerName}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500">{t.phone}:</span>
+                    <span className="text-slate-500">{t?.phone || 'Phone'}:</span>
                     <span className="font-mono text-slate-800">{inspectedTicket.phoneNumber}</span>
                   </div>
                 </>
@@ -418,14 +454,14 @@ export const TicketGrid: React.FC<TicketGridProps> = ({
                   }}
                   className="btn-primary w-full py-2.5"
                 >
-                  {t.viewReceipt}
+                  {t?.viewReceipt || 'View Receipt'}
                 </button>
               ) : (
                 <button
                   onClick={() => setInspectedTicket(null)}
                   className="btn-secondary w-full py-2"
                 >
-                  {t.cancel}
+                  {t?.cancel || 'Close'}
                 </button>
               )}
             </div>
