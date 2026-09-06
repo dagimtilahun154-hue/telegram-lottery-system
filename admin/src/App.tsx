@@ -326,12 +326,12 @@ function AdminContent() {
         }).eq('id', approved.eventId);
       }
 
-      // e) Queue Telegram bot direct notification if participant has a telegram ID
+      // e) Queue Telegram bot direct notification ONLY to this specific buyer
       if (approved.telegramUserId) {
         await supabase.from('broadcasts').insert({
           event_id: approved.eventId,
           title: `🎟️ Ticket #${approved.ticketNumber} Payment Confirmed!`,
-          message_text: `🎉 *እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል!*\n\nለ *${approved.eventTitle}* የቆረጡት ቲኬት ቁጥር *#${approved.ticketNumber}* በተሳካ ሁኔታ ተረጋግጦ ይፋ ሆኗል።\n\nመልካም ዕድል! 🤞`,
+          message_text: `<!--target_user:${approved.telegramUserId}--><!--destination:USERS-->🎉 *እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል!*\n\nለ *${approved.eventTitle}* የቆረጡት ቲኬት ቁጥር *#${approved.ticketNumber}* በተሳካ ሁኔታ ተረጋግጦ ይፋ ሆኗል።\n\nመልካም ዕድል! 🤞`,
           target_language: 'ALL',
           status: 'SENDING',
           total_recipients: 1

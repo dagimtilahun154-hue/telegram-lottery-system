@@ -47,7 +47,7 @@ export async function handleEventSelection(ctx: Context, eventId: string) {
     `🔢 *${t.ticketsPool}:* 1 - ${event.total_tickets}\n` +
     `🏆 *${t.drawDate}:* ${new Date(event.draw_at).toLocaleString()}\n\n` +
     `💳 *${t.paymentInstructions}:*\n` +
-    `• ${userLang === 'am' ? 'ባንክ / የክፍያ ዘዴ' : userLang === 'om' ? 'Mala Kaffaltii' : 'Provider'}: *${event.receiver_provider || 'Telebirr / CBE'}*\n` +
+    `• ${userLang === 'am' ? 'ባንክ / የክፍያ ዘዴ' : userLang === 'om' ? 'Mala Kaffaltii' : 'Provider'}: *${event.payment_provider || 'Telebirr / CBE'}*\n` +
     `• ${userLang === 'am' ? 'የሂሳብ ቁጥር / ስልክ' : userLang === 'om' ? 'Lakk Herregaa' : 'Account Number / Phone'}: \`${event.receiver_account_number}\`\n` +
     `• ${userLang === 'am' ? 'የተቀባይ ስም' : userLang === 'om' ? 'Maqaa' : 'Receiver Name'}: *${event.receiver_name}*\n\n` +
     `${t.selectEventPrompt}`;

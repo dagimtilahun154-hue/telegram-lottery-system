@@ -17,6 +17,7 @@ import { handleMyTickets } from './handlers/mytickets.js';
 import { expirationWorker } from './services/expirationWorker.js';
 import { broadcastWorker } from './services/broadcastWorker.js';
 import { handleAdminBroadcastCommand, handleAdminChannelPostCommand } from './handlers/broadcast.js';
+import { handleResultsWinners } from './handlers/winners.js';
 import { I18N } from './i18n.js';
 
 if (!CONFIG.BOT_TOKEN) {
@@ -73,10 +74,10 @@ bot.hears(['🌐 Change Language', '🌐 ቋንቋ ቀይር', '🌐 Afaan Jijji
   );
 });
 
-bot.hears(['🏆 Results & Winners', '🏆 ውጤቶች እና አሸናፊዎች', "🏆 Bu'aawwan"], async (ctx) => {
-  const userLang = await getUserLanguage(ctx);
-  return ctx.reply(I18N[userLang].resultsPending);
-});
+bot.command('results', handleResultsWinners);
+bot.command('winners', handleResultsWinners);
+
+bot.hears(['🏆 Results & Winners', '🏆 ውጤቶች እና አሸናፊዎች', "🏆 Bu'aawwan"], handleResultsWinners);
 
 bot.hears(['ℹ️ Help & Support', 'ℹ️ እገዛ እና መረጃ', 'ℹ️ Gargaarsa'], async (ctx) => {
   const userLang = await getUserLanguage(ctx);

@@ -51,13 +51,25 @@ export const Winners: React.FC<WinnersProps> = ({ events, purchases }) => {
         ticket_number: winner.ticketNumber
       });
 
-      // 2. Mark event as WINNER_SELECTED
+      // 2. Insert record in public.winners table for transparency & public bot lookup
+      if (winner.participantId) {
+        await supabase.from('winners').insert({
+          event_id: winner.eventId,
+          ticket_number: winner.ticketNumber,
+          participant_id: winner.participantId,
+          prize_title: winner.eventTitle || 'Grand Prize',
+          announcement_text: `🎉 Winner: Ticket #${winner.ticketNumber} (${winner.customerName})`,
+          draw_method: 'PROVABLY_FAIR'
+        });
+      }
+
+      // 3. Mark event as WINNER_SELECTED
       await supabase.from('lottery_events').update({
         status: 'WINNER_SELECTED',
         winner_message: `🎉 Official Winner: Ticket #${winner.ticketNumber} (${winner.customerName})`
       }).eq('id', winner.eventId);
 
-      // 3. Queue public broadcast announcement for Telegram Bot subscribers & channel
+      // 4. Queue public broadcast announcement for Telegram Bot subscribers & channel
       await supabase.from('broadcasts').insert({
         event_id: winner.eventId,
         title: `🏆 OFFICIAL WINNER ANNOUNCED!`,

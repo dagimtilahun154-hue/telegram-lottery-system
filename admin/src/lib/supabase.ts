@@ -11,7 +11,6 @@ export const supabase = createClient(
   supabaseAnonKey
 );
 
-// Zero Mock Data / Zero Fallbacks
 export const INITIAL_EVENTS: LotteryEvent[] = [];
 export const INITIAL_PURCHASES: PurchaseRecord[] = [];
 
@@ -63,21 +62,24 @@ export async function fetchLiveEvents(): Promise<LotteryEvent[]> {
 }
 
 /**
- * Fetch live purchase & payment records from Supabase
+ * Fetch live purchase & payment records from Supabase (combining payments and active reservations)
  */
 export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
   if (!isSupabaseConfigured) return [];
 
   try {
-    const { data, error } = await supabase
+    // 1. Fetch payments
+    const { data: paymentsData, error: paymentsError } = await supabase
       .from('payments')
       .select(`
         id,
         amount,
         status,
         payment_rail,
+        provider,
         transaction_reference,
         proof_image_url,
+        receipt_url,
         detected_account,
         detected_name,
         detected_amount,
@@ -103,6 +105,7 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
           lottery_events (
             id,
             title,
+            ticket_price,
             receiver_account_number,
             receiver_name
           )
@@ -110,17 +113,22 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('[Supabase] fetchLivePurchases query error:', error.message);
-      return [];
+    if (paymentsError) {
+      console.warn('[Supabase] fetchLivePurchases payments error:', paymentsError.message);
     }
 
-    if (!data || data.length === 0) return [];
+    const seenReservationIds = new Set<string>();
+    const seenEventTicketKeys = new Set<string>();
 
-    return data.map((item: any) => {
+    const paymentRecords: PurchaseRecord[] = (paymentsData || []).map((item: any) => {
       const res = item.reservations || {};
       const part = res.participants || {};
       const evt = res.lottery_events || {};
+
+      if (item.reservation_id) seenReservationIds.add(item.reservation_id);
+      if (item.event_id && item.ticket_number) {
+        seenEventTicketKeys.add(`${item.event_id}_${item.ticket_number}`);
+      }
 
       return {
         id: item.id,
@@ -133,11 +141,11 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         participantId: item.participant_id || part.id || undefined,
         eventId: item.event_id || evt.id || '',
         eventTitle: evt.title || 'Lottery Event',
-        amount: Number(item.amount || 0),
+        amount: Number(item.amount || evt.ticket_price || 0),
         status: (item.status === 'VERIFIED' ? 'ISSUED' : item.status) as any,
-        provider: (item.payment_rail || 'CBE').toUpperCase(),
+        provider: (item.payment_rail || item.provider || 'CBE').toUpperCase(),
         reference: item.transaction_reference || undefined,
-        receiptUrl: item.proof_image_url || undefined,
+        receiptUrl: item.proof_image_url || item.receipt_url || undefined,
         expectedAccount: evt.receiver_account_number || '',
         detectedAccount: item.detected_account || undefined,
         expectedName: evt.receiver_name || '',
@@ -149,6 +157,78 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         expiresAt: res.expires_at || item.created_at
       };
     });
+
+    // 2. Fetch active reservations that don't have a payment record yet (15-min live hold)
+    const { data: activeReservations, error: resError } = await supabase
+      .from('reservations')
+      .select(`
+        id,
+        ticket_number,
+        event_id,
+        participant_id,
+        source,
+        status,
+        reserved_at,
+        expires_at,
+        participants (
+          id,
+          user_id,
+          full_name,
+          phone_number,
+          telegram_username
+        ),
+        lottery_events (
+          id,
+          title,
+          ticket_price,
+          payment_provider,
+          receiver_account_number,
+          receiver_name
+        )
+      `)
+      .in('status', ['ACTIVE', 'PAYMENT_SUBMITTED'])
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (resError) {
+      console.warn('[Supabase] fetchLivePurchases active reservations error:', resError.message);
+    }
+
+    const reservationRecords: PurchaseRecord[] = [];
+    if (activeReservations && activeReservations.length > 0) {
+      for (const res of activeReservations) {
+        const key = `${res.event_id}_${res.ticket_number}`;
+        if (!seenReservationIds.has(res.id) && !seenEventTicketKeys.has(key)) {
+          const part = (res as any).participants || {};
+          const evt = (res as any).lottery_events || {};
+
+          reservationRecords.push({
+            id: res.id,
+            ticketNumber: res.ticket_number,
+            customerName: part.full_name || 'Reserved Buyer',
+            phoneNumber: part.phone_number || '',
+            telegramUsername: part.telegram_username || undefined,
+            telegramUserId: part.user_id || undefined,
+            reservationId: res.id,
+            participantId: res.participant_id || part.id || undefined,
+            eventId: res.event_id,
+            eventTitle: evt.title || 'Lottery Event',
+            amount: Number(evt.ticket_price || 0),
+            status: (res.status === 'PAYMENT_SUBMITTED' ? 'PAYMENT_SUBMITTED' : 'RESERVED') as any,
+            provider: (evt.payment_provider || 'TELEBIRR').toUpperCase(),
+            expectedAccount: evt.receiver_account_number || '',
+            expectedName: evt.receiver_name || '',
+            rejectionReason: null,
+            time: res.reserved_at ? new Date(res.reserved_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            source: (res.source || 'BOT') as any,
+            reservedAt: res.reserved_at,
+            expiresAt: res.expires_at
+          });
+        }
+      }
+    }
+
+    return [...reservationRecords, ...paymentRecords];
   } catch (err: any) {
     console.error('[Supabase] Failed to fetch purchases:', err.message);
     return [];

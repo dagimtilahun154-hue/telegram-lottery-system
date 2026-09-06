@@ -46,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: pendingReviewCount > 0 ? pendingReviewCount : undefined,
       badgeColor: 'bg-rose-500'
     },
-    { id: 'grid', label: t.grid, icon: Grid },
+    { id: 'ticket-grid', label: t.grid, icon: Grid },
     { id: 'broadcast', label: t.broadcast, icon: Send },
     { id: 'settings', label: t.settings, icon: Settings },
   ];

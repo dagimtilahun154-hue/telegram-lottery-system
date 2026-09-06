@@ -31,10 +31,18 @@ export async function handleStart(ctx: Context) {
   if (!telegramId) return;
 
   const existingUser = await dbService.getUser(telegramId);
+  const text = (ctx.message && 'text' in ctx.message) ? ctx.message.text : '';
+  const eventMatch = text.match(/\/start\s+event_([a-zA-Z0-9_-]+)/i);
 
   if (existingUser && existingUser.phone_number) {
     const userLang = getLang(existingUser.language);
     userLanguageCache.set(telegramId, userLang);
+
+    if (eventMatch) {
+      const { handleEventSelection } = await import('./lotteries.js');
+      return handleEventSelection(ctx, eventMatch[1]);
+    }
+
     return showMainMenu(ctx, userLang);
   }
 

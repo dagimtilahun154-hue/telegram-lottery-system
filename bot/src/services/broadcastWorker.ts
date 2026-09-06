@@ -96,19 +96,59 @@ export class BroadcastWorker {
         ])
       : undefined;
 
-    // Extract destination and target channel tags if present
+    // Extract destination, target user, and target channel tags if present
+    const targetUserMatch = bc.message_text.match(/<!--target_user:(\d+)-->/);
     const destMatch = bc.message_text.match(/<!--destination:(.+?)-->/);
     const channelMatch = bc.message_text.match(/<!--target_channel:(.+?)-->/);
     const destination = destMatch ? destMatch[1].trim() : 'ALL';
     const targetChannel = channelMatch ? channelMatch[1].trim() : this.defaultChannel;
+    const targetUserId = targetUserMatch ? parseInt(targetUserMatch[1], 10) : null;
 
     const cleanText = bc.message_text
+      .replace(/<!--target_user:(\d+)-->/g, '')
       .replace(/<!--destination:(.+?)-->/g, '')
       .replace(/<!--target_channel:(.+?)-->/g, '')
       .trim();
 
     // Formatted message content (HTML)
     const formattedText = `<b>${this.escapeHtml(bc.title)}</b>\n\n${this.escapeHtml(cleanText)}`;
+
+    // 0. DIRECT SINGLE USER TRANSACTIONAL NOTIFICATION (e.g. ticket approval)
+    if (targetUserId) {
+      try {
+        if (bc.image_url) {
+          await this.bot.telegram.sendPhoto(targetUserId, bc.image_url, {
+            caption: formattedText,
+            parse_mode: 'HTML',
+            ...extraKeyboard
+          });
+        } else {
+          await this.bot.telegram.sendMessage(targetUserId, formattedText, {
+            parse_mode: 'HTML',
+            ...extraKeyboard
+          });
+        }
+        successful++;
+        console.log(`👤 [BroadcastWorker] Directly notified user ${targetUserId} for: "${bc.title}"`);
+      } catch (dmErr: any) {
+        console.warn(`⚠️ [BroadcastWorker] Direct message to user ${targetUserId} failed:`, dmErr.message);
+        failed++;
+      }
+
+      // Mark completed
+      await supabase
+        .from('broadcasts')
+        .update({
+          status: 'SENT',
+          total_recipients: 1,
+          successful_deliveries: successful,
+          failed_deliveries: failed,
+          sent_at: new Date().toISOString()
+        })
+        .eq('id', bc.id);
+
+      return;
+    }
 
     // 1. DISPATCH TO CONFIGURED CHANNEL(S)
     if (destination !== 'BOT' && destination !== 'USERS' && targetChannel) {
