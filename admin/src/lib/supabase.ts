@@ -96,6 +96,20 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         event_id,
         ticket_number,
         participant_id,
+        participants (
+          id,
+          user_id,
+          full_name,
+          phone_number,
+          telegram_username
+        ),
+        lottery_events (
+          id,
+          title,
+          ticket_price,
+          receiver_account_number,
+          receiver_name
+        ),
         reservations (
           id,
           ticket_number,
@@ -129,13 +143,17 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
 
     const paymentRecords: PurchaseRecord[] = (paymentsData || []).map((item: any) => {
       const res = item.reservations || {};
-      const part = res.participants || {};
-      const evt = res.lottery_events || {};
+      const part = item.participants || res.participants || {};
+      const evt = item.lottery_events || res.lottery_events || {};
 
       if (item.reservation_id) seenReservationIds.add(item.reservation_id);
       if (item.event_id && item.ticket_number) {
         seenEventTicketKeys.add(`${item.event_id}_${item.ticket_number}`);
       }
+
+      const rawStatus = (item.status || 'PENDING').toUpperCase();
+      let finalStatus: any = rawStatus;
+      if (rawStatus === 'VERIFIED') finalStatus = 'ISSUED';
 
       return {
         id: item.id,
@@ -149,7 +167,7 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         eventId: item.event_id || evt.id || '',
         eventTitle: evt.title || 'Lottery Event',
         amount: Number(item.amount || evt.ticket_price || 0),
-        status: (item.status === 'VERIFIED' ? 'ISSUED' : item.status) as any,
+        status: finalStatus,
         provider: (item.payment_rail || item.provider || 'CBE').toUpperCase(),
         reference: item.transaction_reference || undefined,
         receiptUrl: item.proof_image_url || item.receipt_url || undefined,

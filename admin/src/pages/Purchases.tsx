@@ -230,6 +230,11 @@ export const Purchases: React.FC<PurchasesProps> = ({
                           <Timer className="w-3 h-3 animate-spin" /> {remaining || t.reserved}
                         </span>
                       )}
+                      {(p.status === 'PAYMENT_SUBMITTED' || p.status === 'VERIFYING' || p.status === 'EXTRACTING' || p.status === 'PENDING') && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200/60">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /> {t.verifying || 'Verifying'}
+                        </span>
+                      )}
                       {p.status === 'MANUAL_REVIEW' && (
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200/60">
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> {t.manualReview}
