@@ -147,9 +147,16 @@ export async function handleReceiptPhoto(ctx: Context) {
     );
 
     if (issueResult && issueResult.success) {
+      const successButtons = [
+        [{ text: t.menuMyTickets, callback_data: 'nav_my_tickets' }],
+        [{ text: t.menuActiveLotteries, callback_data: 'nav_active_lotteries' }]
+      ];
       return ctx.reply(
         t.ticketIssued(ticketNumber, event.title, matchResult.detectedAmount || event.ticket_price, matchResult.detectedRef || detectedRef!),
-        { parse_mode: 'Markdown' }
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: successButtons }
+        }
       );
     }
   }
@@ -289,9 +296,16 @@ export async function handleReceiptDocument(ctx: Context) {
       );
 
       if (issueResult?.success) {
+        const successButtons = [
+          [{ text: t.menuMyTickets, callback_data: 'nav_my_tickets' }],
+          [{ text: t.menuActiveLotteries, callback_data: 'nav_active_lotteries' }]
+        ];
         return ctx.reply(
           t.ticketIssued(ticketNumber, event.title, matchResult.detectedAmount || event.ticket_price, matchResult.detectedRef || detectedRef!),
-          { parse_mode: 'Markdown' }
+          {
+            parse_mode: 'Markdown',
+            reply_markup: { inline_keyboard: successButtons }
+          }
         );
       }
     }
@@ -550,9 +564,16 @@ export async function handleReceiptText(ctx: Context) {
     );
 
     if (issueResult && issueResult.success) {
+      const successButtons = [
+        [{ text: t.menuMyTickets, callback_data: 'nav_my_tickets' }],
+        [{ text: t.menuActiveLotteries, callback_data: 'nav_active_lotteries' }]
+      ];
       return ctx.reply(
         t.ticketIssued(ticketNumber, event.title, matchResult.detectedAmount || event.ticket_price, matchResult.detectedRef || detectedRef),
-        { parse_mode: 'Markdown' }
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { inline_keyboard: successButtons }
+        }
       );
     }
   }

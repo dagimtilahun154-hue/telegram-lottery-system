@@ -373,8 +373,10 @@ function AdminContent() {
       if (approved.telegramUserId) {
         await supabase.from('broadcasts').insert({
           event_id: approved.eventId,
-          title: `🎟️ Ticket #${approved.ticketNumber} Payment Confirmed!`,
-          message_text: `<!--target_user:${approved.telegramUserId}--><!--destination:USERS-->🎉 *እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል!*\n\nለ *${approved.eventTitle}* የቆረጡት ቲኬት ቁጥር *#${approved.ticketNumber}* በተሳካ ሁኔታ ተረጋግጦ ይፋ ሆኗል።\n\nመልካም ዕድል! 🤞`,
+          title: `🎟️ Ticket #${approved.ticketNumber} Confirmed!`,
+          message_text: `<!--target_user:${approved.telegramUserId}--><!--destination:USERS-->🎉 *እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጦ ፀድቋል!*\n\n━━━━━━━━━━━━━━━━━━━━\n🎟️ *የተቆረጠው ቲኬት ቁጥር:* \`#${approved.ticketNumber}\`\n🏆 *የውድድር ስም:* *${approved.eventTitle}*\n💰 *የተከፈለው መጠን:* *${approved.amount} ETB*\n${approved.reference ? `🔢 *የትራንዛክሽን ቁጥር:* \`${approved.reference}\`\n` : ''}━━━━━━━━━━━━━━━━━━━━\n\n✅ *ይፋዊ ቲኬትዎ በዕጣ ማውጫው ውስጥ ገብቷል!*\n🗓️ የዕጣ ቀን አሸናፊውን በቀጥታ እናሳውቃለን።\n\nመልካም ዕድል ይሁንልዎ! 🍀🤞`,
+          button_text: '🎫 የእኔን ቲኬቶች እይ (View My Tickets)',
+          button_url: 'https://t.me/meklawbot',
           target_language: 'ALL',
           status: 'SENDING',
           total_recipients: 1
