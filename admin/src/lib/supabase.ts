@@ -81,15 +81,21 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
       .select(`
         id,
         amount,
+        expected_amount,
+        detected_amount,
         status,
         payment_rail,
         provider,
         transaction_reference,
         proof_image_url,
         receipt_url,
+        expected_receiver_account,
         detected_account,
+        detected_receiver_account,
+        expected_receiver_name,
         detected_name,
-        detected_amount,
+        detected_receiver_name,
+        veritas_raw_response,
         rejection_reason,
         created_at,
         reservation_id,
@@ -155,6 +161,13 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
       let finalStatus: any = rawStatus;
       if (rawStatus === 'VERIFIED') finalStatus = 'ISSUED';
 
+      const expAcc = item.expected_receiver_account || evt.receiver_account_number || '';
+      const detAcc = item.detected_receiver_account || item.detected_account || undefined;
+      const expNm = item.expected_receiver_name || evt.receiver_name || '';
+      const detNm = item.detected_receiver_name || item.detected_name || undefined;
+      const expAmt = Number(item.expected_amount || evt.ticket_price || item.amount || 0);
+      const detAmt = item.detected_amount !== undefined && item.detected_amount !== null ? Number(item.detected_amount) : undefined;
+
       return {
         id: item.id,
         ticketNumber: item.ticket_number || res.ticket_number || 0,
@@ -166,16 +179,19 @@ export async function fetchLivePurchases(): Promise<PurchaseRecord[]> {
         participantId: item.participant_id || part.id || undefined,
         eventId: item.event_id || evt.id || '',
         eventTitle: evt.title || 'Lottery Event',
-        amount: Number(item.amount || evt.ticket_price || 0),
+        amount: Number(item.amount || expAmt || 0),
+        expectedAmount: expAmt,
+        detectedAmount: detAmt,
         status: finalStatus,
         provider: (item.payment_rail || item.provider || 'CBE').toUpperCase(),
         reference: item.transaction_reference || undefined,
         receiptUrl: item.proof_image_url || item.receipt_url || undefined,
-        expectedAccount: evt.receiver_account_number || '',
-        detectedAccount: item.detected_account || undefined,
-        expectedName: evt.receiver_name || '',
-        detectedName: item.detected_name || undefined,
+        expectedAccount: expAcc,
+        detectedAccount: detAcc,
+        expectedName: expNm,
+        detectedName: detNm,
         rejectionReason: item.rejection_reason || null,
+        veritasRaw: item.veritas_raw_response || undefined,
         time: item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
         source: (res.source || 'BOT') as any,
         reservedAt: res.reserved_at || item.created_at,

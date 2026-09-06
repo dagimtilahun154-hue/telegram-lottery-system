@@ -154,6 +154,8 @@ export interface PurchaseRecord {
   eventId: string;
   eventTitle: string;
   amount: number;
+  expectedAmount?: number | null;
+  detectedAmount?: number | null;
   status: TicketStatus;
   provider: string;
   reference?: string | null;
@@ -163,6 +165,7 @@ export interface PurchaseRecord {
   expectedName?: string | null;
   detectedName?: string | null;
   rejectionReason?: string | null;
+  veritasRaw?: any;
   time?: string;
   source?: ParticipantSource;
   reservedAt?: string;

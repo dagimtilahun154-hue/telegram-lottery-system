@@ -4,6 +4,8 @@ export interface OcrExtractionResult {
   reference: string | null;
   detectedProvider: 'CBE' | 'TELEBIRR' | 'UNKNOWN';
   detectedAmount: number | null;
+  detectedAccount?: string | null;
+  detectedName?: string | null;
   confidence: number;
   rawText: string;
 }

@@ -163,15 +163,26 @@ export async function handleReceiptPhoto(ctx: Context) {
 
   const reason = matchResult.reason || verificationResult?.error || 'Manual inspection needed';
 
+  const bankAccount = matchResult.detectedAccount || verificationResult?.receiverAccount || ocrResult.detectedAccount || null;
+  const bankName = matchResult.detectedName || verificationResult?.receiverName || ocrResult.detectedName || null;
+  const bankAmount = matchResult.detectedAmount !== undefined ? matchResult.detectedAmount : (verificationResult?.amount || ocrResult.detectedAmount || null);
+  const bankRef = matchResult.detectedRef || verificationResult?.reference || detectedRef || null;
+
   await supabase
     .from('payments')
     .update({
       status: 'MANUAL_REVIEW',
-      rejection_reason: `${reason} (Extracted Ref: ${detectedRef || 'None'})`,
-      detected_account: matchResult.detectedAccount || null,
-      detected_name: matchResult.detectedName || null,
-      detected_amount: ocrResult.detectedAmount || null,
-      transaction_reference: detectedRef || null
+      rejection_reason: `${reason} (Extracted Ref: ${bankRef || 'None'})`,
+      expected_receiver_account: event.receiver_account_number,
+      detected_account: bankAccount,
+      detected_receiver_account: bankAccount,
+      expected_receiver_name: event.receiver_name,
+      detected_name: bankName,
+      detected_receiver_name: bankName,
+      expected_amount: event.ticket_price,
+      detected_amount: bankAmount,
+      transaction_reference: bankRef,
+      veritas_raw_response: verificationResult?.rawResponse || null
     })
     .eq('id', paymentRecord.payment_id);
 
@@ -289,10 +300,24 @@ export async function handleReceiptDocument(ctx: Context) {
     const extendedExpiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     await supabase.from('reservations').update({ expires_at: extendedExpiresAt, status: 'PAYMENT_SUBMITTED' }).eq('id', reservation.id);
     if (paymentRecord?.payment_id) {
+      const bankAccount = matchResult.detectedAccount || verificationResult?.receiverAccount || ocrResult.detectedAccount || null;
+      const bankName = matchResult.detectedName || verificationResult?.receiverName || ocrResult.detectedName || null;
+      const bankAmount = matchResult.detectedAmount !== undefined ? matchResult.detectedAmount : (verificationResult?.amount || ocrResult.detectedAmount || null);
+      const bankRef = matchResult.detectedRef || verificationResult?.reference || detectedRef || null;
+
       await supabase.from('payments').update({
         status: 'MANUAL_REVIEW',
-        rejection_reason: `${matchResult.reason || 'Manual check needed'} (Ref: ${detectedRef || 'None'})`,
-        transaction_reference: detectedRef || null
+        rejection_reason: `${matchResult.reason || 'Manual check needed'} (Ref: ${bankRef || 'None'})`,
+        expected_receiver_account: event.receiver_account_number,
+        detected_account: bankAccount,
+        detected_receiver_account: bankAccount,
+        expected_receiver_name: event.receiver_name,
+        detected_name: bankName,
+        detected_receiver_name: bankName,
+        expected_amount: event.ticket_price,
+        detected_amount: bankAmount,
+        transaction_reference: bankRef,
+        veritas_raw_response: verificationResult?.rawResponse || null
       }).eq('id', paymentRecord.payment_id);
     }
 
@@ -539,12 +564,26 @@ export async function handleReceiptText(ctx: Context) {
     .update({ expires_at: extendedExpiresAt, status: 'PAYMENT_SUBMITTED' })
     .eq('id', reservation.id);
 
+  const bankAccount = matchResult.detectedAccount || verificationResult?.receiverAccount || null;
+  const bankName = matchResult.detectedName || verificationResult?.receiverName || null;
+  const bankAmount = matchResult.detectedAmount !== undefined ? matchResult.detectedAmount : (verificationResult?.amount || null);
+  const bankRef = matchResult.detectedRef || verificationResult?.reference || detectedRef || null;
+
   await supabase
     .from('payments')
     .update({
       status: 'MANUAL_REVIEW',
-      rejection_reason: `${matchResult.reason || 'Manual check needed'} (Ref: ${detectedRef})`,
-      transaction_reference: detectedRef
+      rejection_reason: `${matchResult.reason || 'Manual check needed'} (Ref: ${bankRef})`,
+      expected_receiver_account: event.receiver_account_number,
+      detected_account: bankAccount,
+      detected_receiver_account: bankAccount,
+      expected_receiver_name: event.receiver_name,
+      detected_name: bankName,
+      detected_receiver_name: bankName,
+      expected_amount: event.ticket_price,
+      detected_amount: bankAmount,
+      transaction_reference: bankRef,
+      veritas_raw_response: verificationResult?.rawResponse || null
     })
     .eq('id', paymentRecord.payment_id);
 

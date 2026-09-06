@@ -135,30 +135,59 @@ export class VeritasService {
       receiver_name: string;
     }
   ): StrictValidationResult {
-    if (!res.isSuccess) {
-      return { valid: false, reason: res.error || 'Verification failed at provider' };
-    }
+    const rawDetectedAmount = res.amount || undefined;
+    const rawDetectedAccount = res.receiverAccount || undefined;
+    const rawDetectedName = res.receiverName || undefined;
+    const rawDetectedRef = res.reference || undefined;
 
-    // 1. Amount check
-    if (res.amount > 0 && Math.abs(res.amount - eventParams.ticket_price) > 0.5) {
+    if (!res.isSuccess) {
       return {
         valid: false,
-        reason: `Amount mismatch: Expected ${eventParams.ticket_price} ETB, detected ${res.amount} ETB`,
-        detectedAmount: res.amount
+        reason: res.error || 'Verification failed at bank system',
+        detectedAmount: rawDetectedAmount,
+        detectedAccount: rawDetectedAccount,
+        detectedName: rawDetectedName,
+        detectedRef: rawDetectedRef
       };
     }
 
-    // 2. Receiver Account check (if available)
+    const issues: string[] = [];
+
+    // 1. Amount check
+    if (res.amount > 0 && Math.abs(res.amount - eventParams.ticket_price) > 0.5) {
+      issues.push(`Amount mismatch: Expected ${eventParams.ticket_price} ETB, detected ${res.amount} ETB`);
+    }
+
+    // 2. Receiver Account check (if available from bank)
     if (res.receiverAccount) {
       const cleanExpected = eventParams.receiver_account_number.replace(/\s+/g, '');
       const cleanDetected = res.receiverAccount.replace(/\s+/g, '');
-      if (cleanExpected !== cleanDetected) {
-        return {
-          valid: false,
-          reason: `Account mismatch: Expected ${cleanExpected}, detected ${cleanDetected}`,
-          detectedAccount: cleanDetected
-        };
+      if (cleanExpected !== cleanDetected && !cleanExpected.includes(cleanDetected) && !cleanDetected.includes(cleanExpected)) {
+        issues.push(`Account mismatch: Expected ${cleanExpected}, detected ${cleanDetected}`);
       }
+    }
+
+    // 3. Receiver Name check (if available from bank)
+    if (res.receiverName) {
+      const normExpected = eventParams.receiver_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normDetected = res.receiverName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normExpected && normDetected) {
+        const isMatch = normDetected.includes(normExpected) || normExpected.includes(normDetected);
+        if (!isMatch) {
+          issues.push(`Receiver Name mismatch: Expected "${eventParams.receiver_name}", bank returned "${res.receiverName}"`);
+        }
+      }
+    }
+
+    if (issues.length > 0) {
+      return {
+        valid: false,
+        reason: issues.join(' | '),
+        detectedAmount: rawDetectedAmount,
+        detectedAccount: rawDetectedAccount,
+        detectedName: rawDetectedName,
+        detectedRef: rawDetectedRef
+      };
     }
 
     return {
@@ -172,3 +201,4 @@ export class VeritasService {
 }
 
 export const veritasService = new VeritasService();
+
